@@ -9,20 +9,15 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from analysis_engine import analyze, parameters
+from market_data import INSTRUMENTS, get_quotes
 
 ROOT = Path(__file__).parent / 'web'
-INSTRUMENTS = {
-    'XRP': {'name': 'XRP', 'symbol': 'XRP-USD', 'kind': 'crypto', 'description': 'XRP / USD · rynek spot'},
-    'XLM': {'name': 'Stellar', 'symbol': 'XLM-USD', 'kind': 'crypto', 'description': 'XLM / USD · rynek spot'},
-    'SILVER': {'name': 'Srebro', 'symbol': 'SI=F', 'kind': 'commodity', 'description': 'Silver futures · cena referencyjna'},
-    'OIL': {'name': 'Ropa WTI', 'symbol': 'CL=F', 'kind': 'commodity', 'description': 'WTI futures · cena referencyjna'},
-    'GOLD': {'name': 'Złoto', 'symbol': 'GC=F', 'kind': 'commodity', 'description': 'Gold futures · cena referencyjna'},
-}
 CACHE = {}
 LOCK = threading.Lock()
 
@@ -96,7 +91,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': '1.1.0', 'instruments': list(INSTRUMENTS)})
+        if parsed.path == '/api/quotes':
+            query = urllib.parse.parse_qs(parsed.query)
+            key = query.get('instrument', [None])[0]
+            if key is not None and key not in INSTRUMENTS:
+                return self.send_json({'error': 'Nieprawidłowy instrument.'}, 400)
+            return self.send_json(get_quotes([key] if key else None))
         if parsed.path == '/api/analyze':
             query = urllib.parse.parse_qs(parsed.query)
             key = query.get('instrument', ['XRP'])[0]
@@ -123,6 +124,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', {'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}[file.suffix[1:]])
         self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
         self.wfile.write(raw)
 
@@ -153,6 +155,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8000)
+    parser.add_argument('--open-browser', action='store_true', help='Otwórz aplikację w przeglądarce po uruchomieniu.')
     args = parser.parse_args()
-    print(f'Inwestapp: http://{args.host}:{args.port}', flush=True)
-    ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    url = f'http://{args.host}:{args.port}'
+    print(f'Inwestapp v1.1: {url}', flush=True)
+    if args.open_browser:
+        threading.Timer(1, lambda: webbrowser.open(url)).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print('\nSerwer zatrzymany.', flush=True)
+    finally:
+        server.server_close()

@@ -50,7 +50,7 @@ def wilder(values, period, start):
 
 def indicators(bars):
     close = [b['close'] for b in bars]
-    e20, e50, e12, e26 = [ema(close, p) for p in (20, 50, 12, 26)]
+    e20, e50, e200, e12, e26 = [ema(close, p) for p in (20, 50, 200, 12, 26)]
     macd = [e12[i] - e26[i] if e26[i] is not None else None for i in range(len(bars))]
     signal = [None] * 25 + ema(macd[25:], 9)
     gain, loss, tr, plus, minus = [[0.0] * len(bars) for _ in range(5)]
@@ -75,7 +75,7 @@ def indicators(bars):
             rsi = 100 - 100 / (1 + avg_gain[i] / avg_loss[i]) if avg_loss[i] else (100 if avg_gain[i] else 50)
         hist = macd[i] - signal[i] if signal[i] is not None else None
         volume_avg = sum(b['volume'] for b in bars[i-20:i]) / 20 if i >= 20 else 0
-        result.append({'ema20': e20[i], 'ema50': e50[i], 'sma200': sum(close[i-199:i+1]) / 200 if i >= 199 else None,
+        result.append({'ema20': e20[i], 'ema50': e50[i], 'ema200': e200[i], 'sma200': sum(close[i-199:i+1]) / 200 if i >= 199 else None,
                        'rsi': rsi, 'macd': macd[i], 'macdSignal': signal[i], 'macdHist': hist, 'atr': atr[i], 'adx': adx[i],
                        'volumeRatio': bar['volume'] / volume_avg if volume_avg > 0 else None,
                        'support': min(b['low'] for b in bars[max(0,i-20):i]) if i else None,
@@ -84,10 +84,11 @@ def indicators(bars):
 
 
 def decision(bar, ind):
-    if ind['sma200'] is None:
+    if ind['sma200'] is None or ind['ema200'] is None:
         return {'action': 'WAIT', 'score': 0, 'checks': [], 'reason': 'Za mało danych do oceny trendu.'}
     checks = [
-        {'name': 'Trend', 'ok': bar['close'] > ind['sma200'] and ind['ema20'] > ind['ema50'], 'detail': 'Cena > SMA200 oraz EMA20 > EMA50'},
+        {'name': 'Trend', 'ok': bar['close'] > ind['sma200'] and bar['close'] > ind['ema200'] and ind['ema20'] > ind['ema50'],
+         'detail': 'Cena > EMA200 i SMA200 oraz EMA20 > EMA50'},
         {'name': 'Siła trendu', 'ok': ind['adx'] >= 20, 'detail': 'ADX(14) ≥ 20'},
         {'name': 'Momentum RSI', 'ok': 50 <= ind['rsi'] <= 70, 'detail': 'RSI(14) między 50 a 70'},
         {'name': 'Momentum MACD', 'ok': ind['macdHist'] > 0, 'detail': 'MACD(12,26,9) powyżej linii sygnałowej'},

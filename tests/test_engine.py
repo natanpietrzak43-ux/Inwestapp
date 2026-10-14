@@ -17,6 +17,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(ind['adx'], 0)
         self.assertEqual(ind['atr'], 2)
         self.assertEqual(ind['macdHist'], 0)
+        self.assertAlmostEqual(ind['ema200'], 100)
         self.assertEqual(decision(rows[-1], ind)['action'], 'WAIT')
 
     def test_rising_prices_rsi(self):
@@ -28,11 +29,19 @@ class AnalysisTests(unittest.TestCase):
         long = indicators(self.bars)
         self.assertEqual(short, long[:400])
 
+    def test_ema200_seed_and_recurrence(self):
+        rows = [{**b, 'close': float(i+1)} for i,b in enumerate(self.bars)]
+        result = indicators(rows)
+        self.assertIsNone(result[198]['ema200'])
+        self.assertEqual(result[199]['ema200'], 100.5)
+        expected = 201*(2/201)+100.5*(1-2/201)
+        self.assertAlmostEqual(result[200]['ema200'], expected)
+
     def test_mandatory_confirmations(self):
-        ind = {'sma200': 80, 'ema20': 95, 'ema50': 90, 'adx': 25, 'rsi': 60,
+        ind = {'sma200': 80, 'ema200': 85, 'ema20': 95, 'ema50': 90, 'adx': 25, 'rsi': 60,
                'macdHist': 1, 'volumeRatio': None, 'atr': 2}
         self.assertEqual(decision({'close': 100}, ind)['action'], 'BUY')
-        for key, value in [('adx', 10), ('rsi', 75), ('macdHist', -1), ('atr', 10), ('ema20', 85)]:
+        for key, value in [('adx', 10), ('rsi', 75), ('macdHist', -1), ('atr', 10), ('ema20', 85), ('ema200', 105)]:
             self.assertEqual(decision({'close': 100}, {**ind,key:value})['action'], 'WAIT')
         bear = {**ind, 'rsi': 40, 'macdHist': -1}
         self.assertEqual(decision({'close': 85}, bear)['action'], 'SELL')

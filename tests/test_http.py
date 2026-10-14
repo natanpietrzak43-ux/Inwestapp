@@ -76,6 +76,15 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request('/api/analyze?mode=demo&risk=9')[0],400)
         self.assertEqual(self.request('/api/analyze?mode=demo&capital=nan')[0],400)
 
+    def test_quote_route_and_invalid_instrument(self):
+        example = {'quotes': [{'instrument':'XRP','status':'error','lastQuote':None,'error':'source failure'}], 'cacheSeconds':10}
+        with patch('server.get_quotes',return_value=example) as source:
+            status,result=self.request('/api/quotes?instrument=XRP')
+            source.assert_called_once_with(['XRP'])
+        self.assertEqual(status,200)
+        self.assertEqual(result,example)
+        self.assertEqual(self.request('/api/quotes?instrument=BTC')[0],400)
+
 
 if __name__ == '__main__':
     unittest.main()
