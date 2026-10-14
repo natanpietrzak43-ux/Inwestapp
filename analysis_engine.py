@@ -1,29 +1,31 @@
-"""Closed daily OHLCV analysis and conservative, next-open long-only simulation."""
+"""Closed OHLCV analysis and conservative, next-open long-only simulation."""
 import math
 from datetime import datetime, timezone
+from timeframes import candle_time, candle_closed
+from technical_tools import extra_indicators, combined_decision, selection
 
 
-def validate_bars(rows):
+def validate_bars(rows, timeframe='1d'):
     if not isinstance(rows, list) or not 220 <= len(rows) <= 5000:
-        raise ValueError('Potrzeba od 220 do 5000 świec dziennych.')
+        raise ValueError('Potrzeba od 220 do 5000 zakończonych świec.')
     result = []
-    previous = ''
+    previous = None
     for row in rows:
         date = str(row['date'])
-        datetime.strptime(date, '%Y-%m-%d')
-        if date <= previous or date >= datetime.now(timezone.utc).strftime('%Y-%m-%d'):
-            raise ValueError('Daty muszą być rosnące, bez duplikatów i bez dzisiejszej otwartej świecy.')
-        bar = {'date': date}
+        when=candle_time(date,timeframe)
+        if (previous is not None and when<=previous) or not candle_closed(date,timeframe):
+            raise ValueError('Daty muszą być rosnące, bez duplikatów i otwartych lub przyszłych świec.')
+        bar = {'date': when.isoformat() if timeframe=='1h' else when.strftime('%Y-%m-%d')}
         for key in ('open', 'high', 'low', 'close', 'volume'):
             bar[key] = float(row.get(key, 0))
-            if not math.isfinite(bar[key]) or bar[key] < 0:
+            if not math.isfinite(bar[key]) or bar[key] < 0 or (key=='volume' and bar[key]>1e18):
                 raise ValueError('Dane OHLCV muszą być skończonymi, nieujemnymi liczbami.')
-        if min(bar[k] for k in ('open', 'high', 'low', 'close')) <= 0:
-            raise ValueError('Ta wersja obsługuje wyłącznie dodatnie ceny.')
+        if any(not 1e-9<=bar[k]<=1e12 for k in ('open','high','low','close')):
+            raise ValueError('Ceny muszą być dodatnie i w zakresie 0,000000001–1 bilion, aby zapewnić stabilne obliczenia.')
         if bar['low'] > min(bar['open'], bar['close']) or bar['high'] < max(bar['open'], bar['close']) or bar['low'] > bar['high']:
             raise ValueError('Nieprawidłowy zakres high/low świecy.')
         result.append(bar)
-        previous = date
+        previous = when
     return result
 
 
@@ -80,29 +82,12 @@ def indicators(bars):
                        'volumeRatio': bar['volume'] / volume_avg if volume_avg > 0 else None,
                        'support': min(b['low'] for b in bars[max(0,i-20):i]) if i else None,
                        'resistance': max(b['high'] for b in bars[max(0,i-20):i]) if i else None})
-    return result
+    extra=extra_indicators(bars,ema,wilder)
+    return [{**ind,**additional} for ind,additional in zip(result,extra)]
 
 
-def decision(bar, ind):
-    if ind['sma200'] is None or ind['ema200'] is None:
-        return {'action': 'WAIT', 'score': 0, 'checks': [], 'reason': 'Za mało danych do oceny trendu.'}
-    checks = [
-        {'name': 'Trend', 'ok': bar['close'] > ind['sma200'] and bar['close'] > ind['ema200'] and ind['ema20'] > ind['ema50'],
-         'detail': 'Cena > EMA200 i SMA200 oraz EMA20 > EMA50'},
-        {'name': 'Siła trendu', 'ok': ind['adx'] >= 20, 'detail': 'ADX(14) ≥ 20'},
-        {'name': 'Momentum RSI', 'ok': 50 <= ind['rsi'] <= 70, 'detail': 'RSI(14) między 50 a 70'},
-        {'name': 'Momentum MACD', 'ok': ind['macdHist'] > 0, 'detail': 'MACD(12,26,9) powyżej linii sygnałowej'},
-        {'name': 'Wolumen', 'ok': ind['volumeRatio'] is not None and ind['volumeRatio'] >= 1, 'detail': 'Wolumen ≥ średnia poprzednich 20 sesji'},
-        {'name': 'Zmienność', 'ok': ind['atr'] / bar['close'] <= .08, 'detail': 'ATR(14) ≤ 8% ceny'}
-    ]
-    score = sum(c['ok'] for c in checks)
-    buy = score >= 5 and all(checks[i]['ok'] for i in (0, 1, 2, 3, 5))
-    sell = bar['close'] < ind['ema50'] and ind['rsi'] < 45 and ind['macdHist'] < 0
-    action = 'BUY' if buy else 'SELL' if sell else 'WAIT'
-    reason = {'BUY': 'Warunki wejścia są spełnione. Sprawdź ryzyko i cenę wykonania przed zleceniem.',
-              'SELL': 'Trend i momentum osłabły. Sygnał zamknięcia istniejącej pozycji kupna; bez otwierania shorta.',
-              'WAIT': 'Brak wystarczającej zgodności warunków wejścia lub wyjścia.'}[action]
-    return {'action': action, 'score': score, 'checks': checks, 'reason': reason}
+def decision(bar, ind, tools=None, strategy='trend'):
+    return combined_decision(bar,ind,tools,strategy)
 
 
 def parameters(capital=10000, risk=1, costs=10):
@@ -121,14 +106,14 @@ def risk_plan(bar, ind, capital, risk, costs):
             'notional': units * entry, 'riskBudget': capital * risk / 100, 'rewardRisk': 1.5}
 
 
-def backtest(bars, inds, capital=10000, risk=1, costs=10):
+def backtest(bars, inds, capital=10000, risk=1, costs=10, tools=None, strategy='trend'):
     cash, fee, position = capital, costs / 10000, None
     trades, equity = [], []
     first = 200
     benchmark_units = capital / (bars[first]['open'] * (1 + fee))
     for i in range(first, len(bars)):
         bar = bars[i]
-        prior = decision(bars[i-1], inds[i-1])
+        prior = decision(bars[i-1], inds[i-1], tools, strategy)
         exit_price, reason = None, None
         if position:
             if bar['open'] <= position['stop']:
@@ -170,12 +155,29 @@ def backtest(bars, inds, capital=10000, risk=1, costs=10):
             'winRate': sum(t['pnl'] > 0 for t in trades)/len(trades)*100 if trades else None,
             'profitFactor': gains/losses if losses else None, 'openPosition': position,
             'holdoutDate': split_date, 'holdoutTrades': len(holdout), 'holdoutPnl': sum(t['pnl'] for t in holdout),
-            'sampleWarning': len(trades) < 30, 'startDate': bars[first]['date'], 'endDate': bars[-1]['date']}
+            'sampleWarning': len(trades) < 30, 'startDate': bars[first]['date'], 'endDate': bars[-1]['date'], 'coreRulesOnly':True}
 
 
-def analyze(bars, capital=10000, risk=1, costs=10):
-    bars = validate_bars(bars)
+def history_guard(stats):
+    reasons=[]
+    if len(stats['trades'])<30:reasons.append('mniej niż 30 zamkniętych transakcji')
+    if stats['returnPct']<=0:reasons.append('wynik całego testu po kosztach nie jest dodatni')
+    if stats['profitFactor'] is None or stats['profitFactor']<=1:reasons.append('profit factor nie przekracza 1')
+    if stats['holdoutTrades']<5 or stats['holdoutPnl']<=0:reasons.append('końcowe 30% ma mniej niż 5 transakcji lub niedodatni wynik')
+    return {'passed':not reasons,'reasons':reasons,'description':'Heurystyczna blokada nowych wejść, bez gwarancji skuteczności. Test przedstawia rdzeń reguł; nie symuluje tej bramki w przeszłości.'}
+
+
+def analyze(bars, capital=10000, risk=1, costs=10, timeframe='1d', tools=None, strategy='trend'):
+    bars = validate_bars(bars,timeframe)
+    tools=selection(tools,strategy)
     capital, risk, costs = parameters(capital, risk, costs)
     inds = indicators(bars)
-    return {'bars': bars, 'indicators': inds, 'decision': decision(bars[-1], inds[-1]),
-            'plan': risk_plan(bars[-1], inds[-1], capital, risk, costs), 'backtest': backtest(bars, inds, capital, risk, costs)}
+    stats=backtest(bars,inds,capital,risk,costs,tools,strategy)
+    current=decision(bars[-1],inds[-1],tools,strategy)
+    guard=history_guard(stats)
+    current['technicalAction']=current['action']
+    if current['action']=='BUY' and not guard['passed']:
+        current={**current,'action':'WAIT','reason':'Układ techniczny kupna jest spełniony, ale test blokuje nowe wejście: '+ '; '.join(guard['reasons'])+'.'}
+    return {'bars': bars, 'indicators': inds, 'decision': current,'historyGuard':guard,
+            'selectedTools':tools,'strategy':strategy,'timeframe':timeframe,
+            'plan': risk_plan(bars[-1], inds[-1], capital, risk, costs), 'backtest': stats}

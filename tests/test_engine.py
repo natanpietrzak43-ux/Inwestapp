@@ -39,12 +39,14 @@ class AnalysisTests(unittest.TestCase):
 
     def test_mandatory_confirmations(self):
         ind = {'sma200': 80, 'ema200': 85, 'ema20': 95, 'ema50': 90, 'adx': 25, 'rsi': 60,
-               'macdHist': 1, 'volumeRatio': None, 'atr': 2}
-        self.assertEqual(decision({'close': 100}, ind)['action'], 'BUY')
-        for key, value in [('adx', 10), ('rsi', 75), ('macdHist', -1), ('atr', 10), ('ema20', 85), ('ema200', 105)]:
-            self.assertEqual(decision({'close': 100}, {**ind,key:value})['action'], 'WAIT')
-        bear = {**ind, 'rsi': 40, 'macdHist': -1}
-        self.assertEqual(decision({'close': 85}, bear)['action'], 'SELL')
+               'macdHist': 1, 'atr': 2, 'obv':20,'obvEma':10,'obvPrevious':15,'hasVolume':True,
+               'bbMid':99,'bbUpper':110,'bbLower':90}
+        self.assertEqual(decision({'close':100,'low':99}, ind)['action'], 'BUY')
+        for key, value in [('adx',10),('rsi',75),('atr',10),('ema20',85),('ema200',105),('obv',5),('bbMid',105)]:
+            self.assertEqual(decision({'close':100,'low':99},{**ind,key:value})['action'],'WAIT')
+        self.assertEqual(decision({'close':100,'low':99},{**ind,'macdHist':-1})['action'],'BUY')
+        bear={**ind,'rsi':40,'ema20':85,'macdHist':-1}
+        self.assertEqual(decision({'close':80,'low':79},bear)['action'],'SELL')
 
     def test_demo_never_recommends_trade(self):
         result = package('XRP', self.bars, 'demo', 10000, 1, 10)
@@ -57,7 +59,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(result['decision']['action'], 'WAIT')
 
     def test_invalid_data(self):
-        for key, value in [('low', 100000), ('volume', -1), ('close', float('nan'))]:
+        for key, value in [('low',100000),('volume',-1),('close',float('nan')),('close',1e-320),('high',1e308)]:
             rows = copy.deepcopy(self.bars)
             rows[-1][key] = value
             with self.assertRaises(ValueError):
@@ -86,7 +88,7 @@ class ExecutionTests(unittest.TestCase):
         self.inds = [{'atr':2} for _ in self.bars]
 
     def run_one_entry(self):
-        def signal(bar, _):
+        def signal(bar, _, *args):
             return {'action': 'BUY' if bar['date'] == self.bars[199]['date'] else 'WAIT'}
         with patch('analysis_engine.decision',side_effect=signal):
             return backtest(self.bars,self.inds,10000,1,10)
@@ -113,14 +115,14 @@ class ExecutionTests(unittest.TestCase):
         self.assertAlmostEqual(trade['pnl'], expected)
 
     def test_final_signal_cannot_execute_without_next_bar(self):
-        with patch('analysis_engine.decision',side_effect=lambda bar,_: {'action':'BUY' if bar['date']==self.bars[-1]['date'] else 'WAIT'}):
+        with patch('analysis_engine.decision',side_effect=lambda bar,_,*args: {'action':'BUY' if bar['date']==self.bars[-1]['date'] else 'WAIT'}):
             result = backtest(self.bars,self.inds)
         self.assertEqual(result['trades'],[])
         self.assertIsNone(result['openPosition'])
         self.assertEqual(result['returnPct'],0)
 
     def test_future_prices_cannot_change_prior_equity(self):
-        def signal(bar,_):
+        def signal(bar,_,*args):
             return {'action':'BUY' if bar['date']==self.bars[199]['date'] else 'WAIT'}
         with patch('analysis_engine.decision',side_effect=signal):
             short=backtest(self.bars[:210],self.inds[:210])

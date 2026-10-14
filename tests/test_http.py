@@ -54,7 +54,7 @@ class HttpTests(unittest.TestCase):
 
     def test_live_response_with_stubbed_provider(self):
         # Contract test only: this is not evidence of real provider connectivity.
-        with patch('server.fetch_bars',return_value=(demo_bars('XRP'),'test-fetch-time')):
+        with patch('server.fetch_bars',return_value=(demo_bars('XRP','1h'),'test-fetch-time')):
             status,result=self.request('/api/analyze?mode=live')
         self.assertEqual(status,200)
         self.assertEqual(result['mode'],'live')
@@ -84,6 +84,30 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status,200)
         self.assertEqual(result,example)
         self.assertEqual(self.request('/api/quotes?instrument=BTC')[0],400)
+
+    def test_catalog_defaults_and_empty_selection(self):
+        status,catalog=self.request('/api/catalog')
+        self.assertEqual(status,200)
+        self.assertEqual(len(catalog['tools']),12)
+        status,result=self.request('/api/analyze?mode=demo&tools=')
+        self.assertEqual(status,200)
+        self.assertEqual(result['timeframe'],'1h')
+        self.assertEqual(result['selectedTools'],[])
+        self.assertTrue(result['decision']['missingGroups'])
+        self.assertEqual(result['decision']['action'],'WAIT')
+
+    def test_hourly_import_and_explicit_selected_tools(self):
+        file=io.StringIO();writer=csv.DictWriter(file,fieldnames=['date','open','high','low','close','volume'])
+        writer.writeheader();writer.writerows(demo_bars('XRP','1h'))
+        status,result=self.request('/api/import',{'instrument':'XRP','csv':file.getvalue(),'timeframe':'1h','tools':['bollinger','stochastic','adx','obv'],'strategy':'range'})
+        self.assertEqual(status,200)
+        self.assertEqual(result['strategy'],'range')
+        self.assertEqual(result['selectedTools'],['bollinger','stochastic','adx','obv'])
+        self.assertEqual(result['timeframe'],'1h')
+
+    def test_invalid_timeframe_tools_and_strategy(self):
+        for suffix in ('timeframe=7d','tools=not-an-indicator','strategy=unknown'):
+            self.assertEqual(self.request('/api/analyze?mode=demo&'+suffix)[0],400)
 
 
 if __name__ == '__main__':
