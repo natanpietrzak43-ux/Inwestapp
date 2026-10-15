@@ -1,6 +1,6 @@
-# Inwestapp 1.2
+# Inwestapp 1.3
 
-Prywatny warsztat analizy technicznej XRP, XLM, srebra, ropy WTI i złota. Domyślne świece godzinowe H1, wybór narzędzi, cztery gotowe zestawy, plan ryzyka i test historyczny. Brak zleceń automatycznych, kont i połączenia z brokerem.
+Prywatny warsztat analizy technicznej XRP, XLM, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, cztery gotowe zestawy, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji i licznik wpisanych prognoz. Brak zleceń automatycznych, kont i połączenia z brokerem.
 
 ## Uruchomienie i aktualizacja na Windows
 
@@ -19,9 +19,9 @@ macOS/Linux: użyj `python3`. Brak zewnętrznych zależności. Opcja `--open-bro
 
 ## Interwał i zakres widoku
 
-Domyślnie **H1 (1 godzina)**, opcjonalnie D1 (1 dzień). Przycisk **1 dzień / 7 dni / 30 dni** wybiera zakres widocznej historii, a nie długość świecy. Wskaźniki, sygnał i test wykorzystują całą pobraną historię: do 6 miesięcy H1 lub 5 lat D1, z buforem historii przez 60 sekund. Pierwsze 200 świec służy rozgrzewce wszystkich zestawów.
+Domyślnie **H1 (1 godzina)**; do wyboru **15 min, 30 min, 1h, 2h, 4h i 24h**. Przycisk **1 dzień / 7 dni / 30 dni / 90 dni / 180 dni** wybiera zakres widocznej historii, a nie długość świecy. Wskaźniki, sygnał i test wykorzystują całą pobraną historię: zwykle do 60 dni M15/M30, 6 miesięcy H1/H2/H4 lub 5 lat D1, z buforem historii przez 60 sekund. Pierwsze 200 świec służy rozgrzewce wszystkich zestawów.
 
-EMA200 na H1 oznacza 200 świec godzinowych; nie 200 dni. Bieżąca nieukończona świeca nie jest używana. Godziny są prezentowane w Europe/Warsaw, a dane i granice zamknięcia są normalizowane do UTC. D1 pomija cały bieżący dzień UTC. Starsze dane blokują rekomendacje: H1 ponad 3h dla krypto i 6h dla surowców; D1 odpowiednio 2 i 4 dni. W weekend blokada starych H1 jest spodziewana. System nie zna harmonogramu konkretnego brokera.
+EMA200 na H1 oznacza 200 świec godzinowych; nie 200 dni. Bieżąca nieukończona świeca nie jest używana. Godziny są prezentowane w Europe/Warsaw, a dane i granice zamknięcia są normalizowane do UTC. D1 pomija cały bieżący dzień UTC. H2/H4 są agregowane z zamkniętych H1 w przedziałach UTC (00:00–02:00 itd.). Godziny bez notowań nie są sztucznie uzupełniane; początkowy niepełny przedział jest odrzucany. Starsze dane blokują rekomendacje: dla interwałów śróddziennych większa z wartości: trzy długości świecy lub 3h krypto / 6h surowce; D1 odpowiednio 2 i 4 dni. Przy braku 90/180 dni M15/M30 aplikacja pokazuje dostępny zakres i ostrzeżenie, nie dopisuje świec. Dłuższą historię można zaimportować z CSV. W weekend blokada starych H1 jest spodziewana. System nie zna harmonogramu konkretnego brokera.
 
 ## Narzędzia
 
@@ -76,20 +76,61 @@ Surowce to referencyjne szeregi GC=F, SI=F, CL=F. Test zakłada ułamkową ekspo
 
 ## Dane i CSV
 
-Bieżący panel cen pozostaje odrębny od świec i sygnałów. XRP/XLM: publiczny Coinbase Exchange ticker (ostatnia transakcja i bid/ask). Surowce: referencyjne metadane Yahoo chart, z możliwym niepodanym opóźnieniem; obserwowano ok. 10 minut. Odczyty co 15/30/60 sekund lub ręcznie nie gwarantują każdego ticka i nie usuwają opóźnienia źródła. Cache cen: 10 sekund. Błąd zachowuje wyłącznie oznaczoną ostatnią znaną cenę. Stare ceny transakcji: ponad 120 sekund krypto lub 600 sekund surowce. Panel zatrzymuje odczyty w ukrytej karcie, demo i CSV.
+Bieżący panel cen pozostaje odrębny od świec i sygnałów. XRP/XLM: publiczny Coinbase Exchange ticker (ostatnia transakcja i bid/ask). Surowce: referencyjne metadane Yahoo chart, z możliwym niepodanym opóźnieniem; obserwowano ok. 10 minut. Odczyty co 15/30/60 sekund lub ręcznie nie gwarantują każdego ticka i nie usuwają opóźnienia źródła. Cache cen: 10 sekund. Błąd zachowuje wyłącznie oznaczoną ostatnią znaną cenę. Stare ceny transakcji: ponad 120 sekund krypto lub 600 sekund surowce. Panel zatrzymuje odczyty w demo i CSV. W ukrytej karcie zatrzymuje się, gdy nie ma aktywnych alertów. Aktywne alerty utrzymują odczyty; przeglądarka nadal może ograniczać timery kart w tle.
 
 HTTPS, bez kluczy: `query1.finance.yahoo.com` i `api.exchange.coinbase.com`. TLS jest weryfikowany. Dostawcy mogą limitować żądania. Brak automatycznego podstawiania demo za błąd danych.
 
-CSV: `date,open,high,low,close,volume`, przecinek, kropka dziesiętna, minimum 220 i maksimum 5000 zakończonych świec, do 2 MB. Wybrany instrument i interwał muszą odpowiadać plikowi. H1 wymaga daty z godziną i strefą, np. `2026-10-13T10:00:00Z`; D1 `2026-10-13`. Daty rosnąco, bez duplikatów; offsety H1 normalizujemy do UTC. Import nie jest trwale zapisywany. Zmiana interwału usuwa bieżący import i wczytuje historię wybranego źródła.
+CSV: `date,open,high,low,close,volume`, przecinek, kropka dziesiętna, minimum 220 i maksimum 25000 zakończonych świec, do 8 MB. Wybrany instrument i interwał muszą odpowiadać plikowi. Każdy interwał śróddzienny wymaga daty z godziną i strefą, np. `2026-10-13T10:00:00Z`; D1 `2026-10-13`. Daty rosnąco, bez duplikatów; offsety dat śróddziennych normalizujemy do UTC. Import nie jest trwale zapisywany. Zmiana interwału usuwa bieżący import i wczytuje historię wybranego źródła.
+
+## Alerty cenowe
+
+Zakładka **Alerty cenowe**: wybierz instrument, cenę w USD i warunek **≥** albo **≤**. Alert jest jednorazowy: pierwszy poprawny odczyt spełniający warunek wyłącza go i zapisuje zdarzenie. Można go uzbroić ponownie lub usunąć. Warunek to osiągnięcie progu przy odczycie; nie wymaga wcześniejszego przejścia przez próg. Kilka równoczesnych odczytów nie tworzy powtórzeń.
+
+Alerty działają przy otwartej aplikacji, uruchomionym serwerze i trybie live. Ręczne odświeżanie przy aktywnych alertach wymusza odczyt co 15 s. Demo/CSV wstrzymują monitorowanie. Brak alertów po zamknięciu przeglądarki, podczas uśpienia lub awarii źródła. Krótkie przekroczenie między odczytami może zostać pominięte. Karty w tle mogą mieć opóźnione timery. Dla krypto dopuszczalny wiek ceny wynosi 120 s; dla opóźnionych cen referencyjnych surowców 1200 s (nie są ceną wykonania zlecenia). Zdarzenie zawiera dostawcę i czas notowania.
+
+Komunikat pojawia się w aplikacji. Przycisk **Włącz powiadomienia i dźwięk** uruchamia dźwięk i prosi o pozwolenie systemu; odmowa nie blokuje komunikatów w aplikacji. Zgoda/dźwięk wymagają ponownego kliknięcia po przeładowaniu.
+
+## Wiadomości
+
+Kanały publiczne: [CoinDesk](https://www.coindesk.com/arc/outboundfeeds/rss/), [Cointelegraph](https://cointelegraph.com/rss), [EIA](https://www.eia.gov/rss/todayinenergy.xml) i [Google News](https://news.google.com/) z wynikami różnych wydawców. Wybierz instrument, aby pobrać pasujące tytuły, krótkie fragmenty RSS, daty i linki. Nie pobieramy pełnych artykułów ani materiałów za paywallem. Lista jest deduplikowana według tytułu. Cache 15 min; nieudane źródło ponawiane najwcześniej po minucie. Otwarta zakładka odświeża się co 15 min, można też kliknąć odświeżanie. RSS może blokować dostęp, zmienić adres lub zwrócić pustą listę; aplikacja pokazuje status każdego źródła. Po awarii zachowuje wyraźnie oznaczony starszy odczyt, bez wymyślania publikacji.
+
+Analiza to **słownikowe tagi tytułów**: słowa o wzroście/spadku, regulacje, makro, podaż/popyt, technologia/adopcja oraz oznaczenia komentarzy analitycznych. Nie jest to analiza całych artykułów ani weryfikacja faktów. Nagłówek o rosnącej podaży nie musi oznaczać wzrostu ceny. Podsumowanie liczy wyłącznie datowane publikacje z ostatnich 72 h z działających źródeł. Nie zmienia sygnału technicznego i nie dostarcza liczbowych prognoz analityków.
+
+## Dziennik transakcji i pomiar pozycji
+
+Wpisz instrument, long/short, ilość, mnożnik kontraktu, cenę i datę wejścia oraz **łączne koszty w USD** (prowizje, finansowanie i inne). Stop i cel są opcjonalne: formularz oblicza planowaną stratę, zysk i stosunek zysku do ryzyka po wpisanych kosztach. Luka i poślizg mogą zwiększyć rzeczywistą stratę. Dla XRP/XLM mnożnik zwykle 1; futures/CFD wymagają sprawdzenia specyfikacji brokera. Nie ma obliczania depozytu ani automatycznego przeliczania walut.
+
+Aby zamknąć wpis: **Edytuj / zamknij → Stan: Zamknięta → cena i data wyjścia → Zapisz**. Częściowe wyjścia rozdziel na osobne wpisy z odpowiednio podzielonymi kosztami. Wynik netto long = (wyjście − wejście) × ilość × mnożnik − koszty; short odwraca różnicę cen. Procentowy wynik odnosi się do wartości wejściowej ekspozycji plus kosztów, nie do depozytu przy dźwigni. Otwarte pozycje wyceniamy ceną referencyjną; starsze wyceny są oznaczone, brak jakiejkolwiek ceny blokuje pełną sumę otwartych pozycji. Przeglądaj ponownie zakładkę, aby odświeżyć wycenę. Dziennik nie zawiera podatków ani automatycznej synchronizacji z brokerem. Jest oddzielony od symulowanych transakcji w Teście strategii.
+
+## Prognozy analityków — jawna dostępność danych
+
+Dostawcy notowań używani w tej wersji **nie zapewniają spójnego automatycznego konsensusu cen docelowych** dla XRP/XLM i surowców. Licznik jest narzędziem dla **ręcznie dodanych, zweryfikowanych przez użytkownika prognoz**. Nie jest automatycznym konsensusem rynku. Nie generujemy prognoz z RSI, tonu wiadomości ani oceny zgodności grup.
+
+Wybierz instrument i horyzont **30/90/180/365 dni od publikacji**, podaj autora, cenę docelową, datę oraz publiczny link https. Sprawdź zgodność jednostki USD, konkretnego instrumentu (dla surowców GC=F, SI=F, CL=F), terminu kontraktu i horyzontu. Formularz wymaga potwierdzenia weryfikacji. Model nie sprawdza automatycznie treści linku. Komentarz dotyczący spółki wydobywczej, ceny spot lub innego kontraktu może nie być porównywalny.
+
+Aktywne są prognozy opublikowane w ostatnich 30 dniach, niewygasłe, dla jednego instrumentu i horyzontu. Najnowszy wpis jednego autora to jeden głos; wcześniejsze i stare wpisy nadal widać w liście. Licznik = (mediana celów / aktualna cena odniesienia − 1) × 100%. Bez celów lub przy starej/brakującej cenie nie wyświetlamy oczekiwanej zmiany. Skala paska to −100% do +100%, dokładna liczba obok nie jest przycinana. To prognozowana zmiana ceny według wybranych źródeł, bez kosztów i bez prawdopodobieństwa realizacji. Ten panel nie wpływa na „kup/sprzedaj/czekaj”.
+
+## Trwałość i kopia danych
+
+SQLite w standardowej bibliotece Pythona; brak instalowania pakietów. **Windows: `%LOCALAPPDATA%\Inwestapp\inwestapp.sqlite3`**. Wklej `%LOCALAPPDATA%\Inwestapp` w pasek Eksploratora plików. Baza jest poza ZIP-em: aktualizacja do nowego folderu zachowa alerty, zdarzenia, transakcje i prognozy. Linux/macOS: `.data/inwestapp.sqlite3` obok serwera. Opcjonalnie ustaw `INWESTAPP_DATA_DIR` na własny folder. Nie uruchamiaj równocześnie kilku wersji.
+
+**Eksport danych JSON** w dzienniku zapisuje czytelną kopię wszystkich tabel. Automatyczny import JSON nie jest dostępny. Aby uzyskać kopię gotową do odtworzenia, zatrzymaj serwer Ctrl+C i skopiuj plik `inwestapp.sqlite3` w bezpieczne miejsce. Odtworzenie: przy zatrzymanym serwerze zachowaj obecną bazę i wstaw kopię pod tę samą ścieżkę. ZIP/Git nie zawierają osobistych wpisów. Ustawienia zestawów pozostają w localStorage przeglądarki.
+
+Serwer domyślnie nasłuchuje tylko na 127.0.0.1. Sprawdza lokalny nagłówek Host i zgodność Origin przy zapisie, wymaga JSON. Nie jest przeznaczony do publicznego hostingu bez logowania i zabezpieczeń.
 
 ## Sprawdzenie i API
 
 ```sh
 python -m unittest discover -s tests -v
 node --check web/app.js
+node --check web/workspace.js
 ```
 
-`GET /api/health` → `version=1.2.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
+`GET /api/health` → `version=1.3.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
+
+Nowe API: `GET/POST /api/alerts`, `POST /api/alerts/{id}/rearm`, `DELETE /api/alerts/{id}`; `GET /api/journal`, `POST /api/trades`, `PUT/DELETE /api/trades/{id}`; `GET /api/news?instrument=XRP`; `GET /api/forecasts?instrument=XRP&horizon=90`, `POST /api/forecasts`, `DELETE /api/forecasts/{id}`; `GET /api/export`. Zapis wymaga obiektu JSON, ceny i wyniki są w USD. `GET /api/quotes` ocenia aktywne alerty i zwraca nowe `alertEvents`.
+
+Weryfikacja wersji 1.3 (2026-10-15): 69 testów jednostkowych i HTTP, test Chromium dodawania/ponownego uzbrajania alertu, trwałości po przeładowaniu, dziennika (otwarcie → edycja → zamknięcie, wynik netto), eksportu JSON, wpisanych prognoz, wiadomości oraz widoku mobilnego. Rzeczywiste pobrania: wszystkie 6 interwałów XRP, M15/H4 dla pozostałych 4 instrumentów oraz cztery kanały RSS. Testy korzystają z osobnych tymczasowych baz. `Uruchom.bat` nie był wykonywany na Windows w środowisku chmurowym.
 
 ## Źródła reguł i ograniczeń
 

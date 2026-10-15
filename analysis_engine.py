@@ -6,8 +6,8 @@ from technical_tools import extra_indicators, combined_decision, selection
 
 
 def validate_bars(rows, timeframe='1d'):
-    if not isinstance(rows, list) or not 220 <= len(rows) <= 5000:
-        raise ValueError('Potrzeba od 220 do 5000 zakończonych świec.')
+    if not isinstance(rows, list) or not 220 <= len(rows) <= 25000:
+        raise ValueError('Potrzeba od 220 do 25000 zakończonych świec.')
     result = []
     previous = None
     for row in rows:
@@ -15,7 +15,7 @@ def validate_bars(rows, timeframe='1d'):
         when=candle_time(date,timeframe)
         if (previous is not None and when<=previous) or not candle_closed(date,timeframe):
             raise ValueError('Daty muszą być rosnące, bez duplikatów i otwartych lub przyszłych świec.')
-        bar = {'date': when.isoformat() if timeframe=='1h' else when.strftime('%Y-%m-%d')}
+        bar = {'date': when.isoformat() if timeframe!='1d' else when.strftime('%Y-%m-%d')}
         for key in ('open', 'high', 'low', 'close', 'volume'):
             bar[key] = float(row.get(key, 0))
             if not math.isfinite(bar[key]) or bar[key] < 0 or (key=='volume' and bar[key]>1e18):

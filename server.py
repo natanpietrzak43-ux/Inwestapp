@@ -4,6 +4,9 @@ import csv
 import io
 import json
 import random
+import sqlite3
+import user_data
+from news_data import get_news
 import math
 import threading
 import time
@@ -17,7 +20,7 @@ from pathlib import Path
 from analysis_engine import analyze, parameters
 from market_data import INSTRUMENTS, get_quotes
 from technical_tools import TOOLS, PRESETS, SOURCES, selection
-from timeframes import TIMEFRAMES, candle_time, candle_closed
+from timeframes import TIMEFRAMES, candle_time, candle_closed, aggregate_hours
 
 ROOT = Path(__file__).parent / 'web'
 CACHE = {}
@@ -35,9 +38,9 @@ def demo_bars(key, timeframe='1d'):
         if INSTRUMENTS[key]['kind'] != 'crypto' and date.weekday() > 4:
             continue
         op = price * math.exp(rng.gauss(0, .003))
-        volatility = (.024 if key in ('XRP', 'XLM') else .012)/(4.9 if timeframe=='1h' else 1)
+        volatility = (.024 if key in ('XRP', 'XLM') else .012)/math.sqrt(86400/TIMEFRAMES[timeframe]['seconds'])
         price = op * math.exp(.0004 + .002 * math.sin(i / 45) + rng.gauss(0, volatility))
-        bars.append({'date': date.isoformat() if timeframe=='1h' else date.strftime('%Y-%m-%d'), 'open': op, 'high': max(op, price) * (1+rng.uniform(.001, .015)),
+        bars.append({'date': date.isoformat() if timeframe!='1d' else date.strftime('%Y-%m-%d'), 'open': op, 'high': max(op, price) * (1+rng.uniform(.001, .015)),
                      'low': min(op, price) * (1-rng.uniform(.001, .015)), 'close': price, 'volume': rng.randint(100000, 300000)})
     return bars
 
@@ -60,10 +63,11 @@ def fetch_bars(key, timeframe='1h'):
     bars = []
     for i, timestamp in enumerate(result['timestamp']):
         when=datetime.fromtimestamp(timestamp,timezone.utc)
-        date = when.isoformat() if timeframe=='1h' else when.strftime('%Y-%m-%d')
-        if not candle_closed(date,timeframe,now) or any(quote[k][i] is None for k in ('open', 'high', 'low', 'close')):
+        date = when.isoformat() if timeframe!='1d' else when.strftime('%Y-%m-%d')
+        if not candle_closed(date,'1h' if spec.get('aggregate') else timeframe,now) or any(quote[k][i] is None for k in ('open', 'high', 'low', 'close')):
             continue
         bars.append({'date': date, **{k: quote[k][i] for k in ('open', 'high', 'low', 'close')}, 'volume': quote['volume'][i] or 0})
+    if spec.get('aggregate'):bars=aggregate_hours(bars,timeframe,now)
     fetched = datetime.now(timezone.utc).isoformat()
     with LOCK:
         CACHE[cache_key] = (time.time(), bars, fetched)
@@ -74,10 +78,10 @@ def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d',
     result = analyze(bars, capital, risk, costs,timeframe,tools,strategy)
     age_seconds=max(0,(datetime.now(timezone.utc)-candle_time(bars[-1]['date'],timeframe)).total_seconds())
     age=age_seconds/86400
-    threshold=(3 if INSTRUMENTS[key]['kind']=='crypto' else 6)*3600 if timeframe=='1h' else (2 if INSTRUMENTS[key]['kind']=='crypto' else 4)*86400
+    threshold=max(TIMEFRAMES[timeframe]['seconds']*3, (3 if INSTRUMENTS[key]['kind']=='crypto' else 6)*3600) if timeframe!='1d' else (2 if INSTRUMENTS[key]['kind']=='crypto' else 4)*86400
     stale = age_seconds>threshold
     result.update({'instrument': {'id': key, **INSTRUMENTS[key]}, 'mode': mode, 'fetchedAt': fetched,
-                   'lastDate': bars[-1]['date'], 'stale': stale, 'ageDays': age,'ageSeconds':round(age_seconds)})
+                   'lastDate': bars[-1]['date'], 'stale': stale, 'ageDays': age,'ageSeconds':round(age_seconds), 'history':{'first':bars[0]['date'],'last':bars[-1]['date'],'availableDays':round((candle_time(bars[-1]['date'],timeframe)-candle_time(bars[0]['date'],timeframe)).total_seconds()/86400,1),'providerLimitDays':TIMEFRAMES[timeframe]['limitDays'] if mode=='live' else None,'aggregated':bool(TIMEFRAMES[timeframe].get('aggregate'))}})
     if mode == 'demo' or stale:
         result['decision']['modelAction'] = result['decision']['action']
         result['decision']['action'] = 'WAIT'
@@ -94,12 +98,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.end_headers()
-        self.wfile.write(raw)
+        try:self.wfile.write(raw)
+        except (ConnectionError,TimeoutError):pass
+
+    def allowed(self, write=False):
+        host=self.headers.get('Host','')
+        parsed=urllib.parse.urlparse('//'+host)
+        if parsed.hostname not in ('localhost','127.0.0.1','::1'):
+            self.send_json({'error':'Serwer jest przeznaczony do użytku lokalnego.'},403);return False
+        origin=self.headers.get('Origin')
+        if write and origin and origin != 'http://'+host:
+            self.send_json({'error':'Niedozwolone źródło żądania.'},403);return False
+        return True
 
     def do_GET(self):
+        if not self.allowed():return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'version': '1.2.0', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': '1.3.0', 'instruments': list(INSTRUMENTS)})
         if parsed.path=='/api/catalog':
             return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES})
         if parsed.path == '/api/quotes':
@@ -107,7 +123,10 @@ class Handler(BaseHTTPRequestHandler):
             key = query.get('instrument', [None])[0]
             if key is not None and key not in INSTRUMENTS:
                 return self.send_json({'error': 'Nieprawidłowy instrument.'}, 400)
-            return self.send_json(get_quotes([key] if key else None))
+            snapshot=get_quotes([key] if key else None)
+            try:snapshot['alertEvents']=user_data.evaluate_alerts(snapshot['quotes'])
+            except (sqlite3.Error,OSError):snapshot['monitorError']='Nie udało się zapisać alertu w bazie. Sprawdź dostęp do folderu danych.'
+            return self.send_json(snapshot)
         if parsed.path == '/api/analyze':
             query = urllib.parse.parse_qs(parsed.query,keep_blank_values=True)
             key = query.get('instrument', ['XRP'])[0]
@@ -130,7 +149,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(package(key, bars, mode, *args, fetched=fetched,timeframe=timeframe,tools=tools,strategy=strategy))
             except (ValueError, KeyError, TypeError, IndexError) as exc:
                 return self.send_json({'error': str(exc)}, 400)
-        paths = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+        if parsed.path in ('/api/alerts','/api/journal','/api/export','/api/forecasts','/api/news'):
+            try:
+                query=urllib.parse.parse_qs(parsed.query)
+                if parsed.path=='/api/alerts':return self.send_json(user_data.list_alerts())
+                if parsed.path=='/api/export':return self.send_json(user_data.export_data())
+                if parsed.path=='/api/journal':
+                    opened={r['instrument'] for r in user_data.raw_records('trades') if r['exit_price'] is None}
+                    quotes=get_quotes(sorted(opened))['quotes'] if opened else []
+                    return self.send_json(user_data.journal(quotes))
+                key=user_data.instrument(query.get('instrument',['XRP'])[0])
+                if parsed.path=='/api/news':return self.send_json(get_news(key))
+                horizon=int(query.get('horizon',['90'])[0])
+                quote=get_quotes([key])['quotes'][0]
+                return self.send_json(user_data.forecast_summary(key,horizon,quote))
+            except (ValueError,TypeError,KeyError) as exc:return self.send_json({'error':str(exc)},400)
+            except (sqlite3.Error,OSError):return self.send_json({'error':'Baza danych jest niedostępna.'},503)
+        paths = {'/workspace.js':'workspace.js', '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
         if parsed.path not in paths:
             return self.send_json({'error': 'Nie znaleziono.'}, 404)
         file = ROOT / paths[parsed.path]
@@ -140,18 +175,37 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
-        self.wfile.write(raw)
+        try:self.wfile.write(raw)
+        except (ConnectionError,TimeoutError):pass
 
-    def do_POST(self):
-        if self.path != '/api/import':
-            return self.send_json({'error': 'Nie znaleziono.'}, 404)
+    def do_POST(self):return self.mutate('POST')
+    def do_PUT(self):return self.mutate('PUT')
+    def do_DELETE(self):return self.mutate('DELETE')
+
+    def mutate(self,method):
+        if not self.allowed(write=True):return
         try:
-            length = int(self.headers.get('Content-Length', 0))
-            if not 0 < length <= 2_000_000:
-                raise ValueError('Plik może mieć maksymalnie 2 MB.')
-            body = json.loads(self.rfile.read(length))
-            if not isinstance(body, dict) or not isinstance(body.get('csv'), str):
-                raise ValueError('Import wymaga obiektu JSON z tekstowym polem csv.')
+            if self.headers.get('Content-Type','').split(';')[0]!='application/json':
+                return self.send_json({'error':'Wymagany typ application/json.'},415)
+            length=int(self.headers.get('Content-Length',0))
+            if not 0<length<=9_000_000:raise ValueError('Żądanie może mieć maksymalnie 9 MB.')
+            body=json.loads(self.rfile.read(length))
+            if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
+            parts=urllib.parse.urlparse(self.path).path.strip('/').split('/')
+            if len(parts)>=2 and parts[0]=='api' and parts[1] in ('alerts','trades','forecasts'):
+                table=parts[1];identifier=parts[2] if len(parts)>2 else None
+                if method=='DELETE' and identifier and len(parts)==3:
+                    user_data.delete_record(table,identifier);return self.send_json({'ok':True})
+                if method=='POST' and table=='alerts' and len(parts)==4 and parts[3]=='rearm':
+                    user_data.rearm_alert(identifier);return self.send_json({'ok':True})
+                if method=='PUT' and table=='trades' and identifier and len(parts)==3:
+                    return self.send_json(user_data.save_trade(body,identifier))
+                if method=='POST' and len(parts)==2:
+                    function={'alerts':user_data.add_alert,'trades':user_data.save_trade,'forecasts':user_data.save_forecast}[table]
+                    return self.send_json(function(body),201)
+                return self.send_json({'error':'Nieprawidłowa operacja.'},400)
+            if self.path!='/api/import' or method!='POST':return self.send_json({'error':'Nie znaleziono.'},404)
+            if not isinstance(body.get('csv'),str):raise ValueError('Import wymaga tekstowego pola csv.')
             key = body.get('instrument')
             if key not in INSTRUMENTS:
                 raise ValueError('Nieprawidłowy instrument.')
@@ -163,6 +217,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(package(key, bars, 'csv', *args,timeframe=body.get('timeframe','1d'),tools=body.get('tools'),strategy=body.get('strategy','trend')))
         except (ValueError, KeyError, TypeError, IndexError) as exc:
             return self.send_json({'error': str(exc)}, 400)
+        except (sqlite3.Error,OSError):
+            return self.send_json({'error':'Baza danych jest niedostępna.'},503)
 
 
 if __name__ == '__main__':
@@ -173,7 +229,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f'http://{args.host}:{args.port}'
-    print(f'Inwestapp v1.2: {url}', flush=True)
+    print(f'Inwestapp v1.3: {url}', flush=True)
     if args.open_browser:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
     try:

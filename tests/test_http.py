@@ -2,6 +2,8 @@ import csv
 import io
 import json
 import threading
+import tempfile
+import os
 import unittest
 import urllib.error
 import urllib.request
@@ -19,6 +21,9 @@ class QuietHandler(Handler):
 class HttpTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.storage=tempfile.TemporaryDirectory()
+        cls.env=patch.dict(os.environ,{'INWESTAPP_DATA_DIR':cls.storage.name})
+        cls.env.start()
         cls.server = ThreadingHTTPServer(('127.0.0.1',0), QuietHandler)
         cls.thread = threading.Thread(target=cls.server.serve_forever,daemon=True)
         cls.thread.start()
@@ -29,6 +34,8 @@ class HttpTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         cls.thread.join()
+        cls.env.stop()
+        cls.storage.cleanup()
 
     def request(self, path, body=None):
         req = urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,
@@ -38,6 +45,36 @@ class HttpTests(unittest.TestCase):
                 return response.status,json.load(response)
         except urllib.error.HTTPError as exc:
             return exc.code,json.load(exc)
+
+    def test_all_timeframes_in_http_keep_timestamps(self):
+        for tf in ('15m','30m','1h','2h','4h','1d'):
+            status,r=self.request('/api/analyze?mode=demo&timeframe='+tf)
+            self.assertEqual(status,200)
+            self.assertEqual(r['timeframe'],tf)
+            self.assertEqual('T' in r['bars'][0]['date'],tf!='1d')
+            self.assertIn('availableDays',r['history'])
+
+    def test_persistent_crud_and_loopback_security(self):
+        status,alert=self.request('/api/alerts',{'instrument':'XLM','direction':'above','price':999})
+        self.assertEqual(status,201)
+        self.assertTrue(any(a['id']==alert['id'] for a in self.request('/api/alerts')[1]['alerts']))
+        for method,path,body,headers,expected in [
+            ('POST','/api/alerts',{}, {'Origin':'https://evil.example','Content-Type':'application/json'},403),
+            ('POST','/api/alerts',{}, {'Content-Type':'text/plain'},415),
+            ('GET','/api/export',None,{'Host':'evil.example'},403),
+            ('DELETE','/api/alerts/'+alert['id'],{}, {'Content-Type':'application/json'},200)]:
+            req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,method=method,headers=headers)
+            try:
+                with urllib.request.urlopen(req) as r:code=r.status
+            except urllib.error.HTTPError as exc:code=exc.code
+            self.assertEqual(code,expected)
+        self.assertFalse(any(a['id']==alert['id'] for a in self.request('/api/alerts')[1]['alerts']))
+
+    def test_news_and_forecast_routes_reject_invalid_instrument(self):
+        for path in ('/api/news?instrument=BTC','/api/forecasts?instrument=BTC'):
+            self.assertEqual(self.request(path)[0],400)
+        example={'items':[],'sources':[],'notice':'test'}
+        with patch('server.get_news',return_value=example):self.assertEqual(self.request('/api/news?instrument=XRP'),(200,example))
 
     def test_all_demo_routes(self):
         for key in ('XRP','XLM','SILVER','OIL','GOLD'):
@@ -82,7 +119,8 @@ class HttpTests(unittest.TestCase):
             status,result=self.request('/api/quotes?instrument=XRP')
             source.assert_called_once_with(['XRP'])
         self.assertEqual(status,200)
-        self.assertEqual(result,example)
+        self.assertEqual(result['quotes'],example['quotes'])
+        self.assertEqual(result['alertEvents'],[])
         self.assertEqual(self.request('/api/quotes?instrument=BTC')[0],400)
 
     def test_catalog_defaults_and_empty_selection(self):
