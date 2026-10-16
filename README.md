@@ -1,6 +1,6 @@
-# Inwestapp 1.3
+# Inwestapp 1.4
 
-Prywatny warsztat analizy technicznej XRP, XLM, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, cztery gotowe zestawy, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji i licznik wpisanych prognoz. Brak zleceń automatycznych, kont i połączenia z brokerem.
+Prywatny warsztat analizy technicznej XRP, XLM, BTC/USD, ETH/USD, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, pięć gotowych zestawów, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji i licznik wpisanych prognoz. Brak zleceń automatycznych, kont i połączenia z brokerem.
 
 ## Uruchomienie i aktualizacja na Windows
 
@@ -16,6 +16,26 @@ python server.py --host 127.0.0.1 --port 8000
 ```
 
 macOS/Linux: użyj `python3`. Brak zewnętrznych zależności. Opcja `--open-browser` otwiera przeglądarkę. Nie wystawiaj tego serwera bez uwierzytelniania do Internetu. W onboardingu chmurowym podgląd localhost nie jest udostępniany; używamy lokalnych żądań do weryfikacji.
+
+## Aktualizacja 1.4 — nowe narzędzia i instrumenty
+
+**BTC/USD (Bitcoin)** i **ETH/USD (Ethereum)** działają w analizie, wszystkich 6 interwałach, bieżących cenach Coinbase Exchange, alertach, wiadomościach, dzienniku i wpisanych prognozach. Razem aplikacja obsługuje 7 instrumentów. Serie historyczne z Yahoo to `BTC-USD` i `ETH-USD`; mogą różnić się od cen giełdy Coinbase i wykresu TradingView. Wiek dopuszczalny cen do alertów krypto pozostaje 120 s, również dla nowych par.
+
+W **Gotowym zestawie** wybierz **Trend — EMA 21/89/200 + B-Xtrender**. Zaznaczy to nowe narzędzia oraz ADX, OBV i Bollinger. Możesz też osobno zaznaczyć je w **Własnym doborze**. Dotychczasowe ustawienia przeglądarki zostają zachowane; nowy zestaw nie włącza się automatycznie. Dotychczasowe EMA20/50/200, RSI14 i pozostałe narzędzia zachowują obliczenia.
+
+**EMA 21 / 89 / 200 — M1 / M2 / M3:** konfiguracja wskazana przez użytkownika według EMA en 1 Indicador (Jesús Mercado). M1 = EMA21 zielona; M2 = EMA89 biała z ciemnym obrysem dla jasnego wykresu; M3 = EMA200 czerwona. Źródło to `close`, okresy oznaczają liczbę świec wybranego interwału. Nowe średnie mają inicjalizację pierwszą ceną i α = 2/(okres+1), a nie nasiono SMA stosowane w starym zestawie. Pierwsze wartości mogą różnić się od TradingView, jeśli zaczynamy od innego miejsca historii. Wymagamy 200 świec rozgrzewki. W grupie trendu: wzrost `cena > M1 > M2 > M3`; spadek `cena < M1 < M2 < M3`; pozostałe układy są neutralne. Odtwarzamy wskazane okresy i kolory standardowych EMA; oryginalny kod Mercado nie był dostępny do porównania.
+
+**B-Xtrender — QuantTherapy:** lokalna adaptacja formuł z publicznej kopii Pine **Backtest Edition**, zgodnej nazwą z [linkiem użytkownika](https://wild.pynesys.io/scripts/b-xtrender-backtest-edition-quanttherapy-uCWPAPT2). Zweryfikowana [kopia kodu z przypisaniem autorstwa i MPL 2.0](https://github.com/hasnocool/tradingview-pine-scripts/blob/69969aeaf271b2f7b5a7632a1bde43069a0cbe26/B-Xtrender%20%5BBacktest%20Edition%5D%20%40QuantTherapy.pine). Bez połączenia z kontem TradingView lub instalowania Pine.
+
+- Krótkie momentum: `RSI15(EMA5(close) − EMA20(close)) − 50`.
+- Długi trend: `RSI15(EMA20(close)) − 50`.
+- RSI ma nasiono ze średniej pierwszych 15 zmian i wygładzanie Wildera; przy braku strat przyjmuje 100, także dla płaskiej serii. Brakujące wartości przed rozgrzewką nie są zastępowane zerami.
+- Na wykresie: wąskie słupki krótkie, szerokie jasne długie. Powyżej 0 zielone, poniżej 0 czerwone; jaśniejszy kolor oznacza wzrost wartości względem poprzedniej świecy. Zero i rozbieżne składowe są neutralne.
+- Dodatkowe wygładzenie Tillson T3(5; 0,7) i punkty zwrotne są kontekstem Inwestapp, poza wskazaną Backtest Edition. Niebieska linia jest obliczana z 6 kolejnych EMA i standardowych współczynników T3. Punkty pojawiają się na świecy potwierdzenia zwrotu, nie są cofane w historii i nie uczestniczą w głosowaniu.
+
+B-Xtrender należy do jednej grupy **momentum**. Potwierdza wzrost, gdy obie składowe są dodatnie, i spadek, gdy obie są ujemne. Dołożenie RSI/MACD nie zwiększa liczby grup — wszystkie wybrane narzędzia momentum muszą się zgadzać. Zestaw EMA + B-Xtrender nadal wymaga ADX ≥ 20, potwierdzenia OBV, kontekstu Bollingera i dodatniego ATR ≤ 8% ceny. Nowe wejście kupna nadal podlega blokadzie historycznej. Brak danych albo niekompletny zestaw oznacza czekanie.
+
+**Test strategii ocenia nasze połączenie narzędzi**, z dotychczasowym stopem 2 ATR, celem 3 ATR, kosztami i kolejnym otwarciem. Nie odtwarza strategii Backtest Edition ze stopem procentowym, jej wyjściem przy zmianie jednej składowej ani shortami. Sprzedaj w analizie nadal oznacza wyjście z istniejącej pozycji kupna. Zgodność narzędzi ani dodanie BTC/ETH nie dowodzą zyskowności. Szczegóły autorstwa, źródeł i licencji: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Interwał i zakres widoku
 
@@ -37,13 +57,14 @@ EMA200 na H1 oznacza 200 świec godzinowych; nie 200 dni. Bieżąca nieukończon
 - Momentum10: 100 × zamknięcie / zamknięcie sprzed 10 świec; równowaga 100.
 - MACD12/26/9: istniejący wskaźnik, dodatkowa opcja.
 
-Nakładki rysujemy na wykresie ceny; RSI, Stochastic, OBV, ADX, Momentum i MACD mają oddzielne wykresy. Własny wybór zapisuje się lokalnie w przeglądarce razem z ryzykiem, kosztem i interwałem.
+Nakładki rysujemy na wykresie ceny; B-Xtrender, RSI, Stochastic, OBV, ADX, Momentum i MACD mają oddzielne wykresy. Własny wybór zapisuje się lokalnie w przeglądarce razem z ryzykiem, kosztem i interwałem.
 
 ## Gotowe zestawy i reguły
 
 | Zestaw | Narzędzia | Tryb |
 | --- | --- | --- |
 | Podstawowy | EMA + RSI + ADX + OBV + Bollinger | Trend |
+| EMA21/89/200 + B-Xtrender | EMA M1/M2/M3 + B-Xtrender + ADX + OBV + Bollinger | Trend |
 | Ichimoku | Ichimoku + Stochastic + ADX + OBV + SAR | Trend |
 | Aligator | Alligator + Momentum + ADX + OBV + Fibonacci | Trend |
 | Konsolidacja | Bollinger + Stochastic + ADX + OBV | Konsolidacja |
@@ -76,7 +97,7 @@ Surowce to referencyjne szeregi GC=F, SI=F, CL=F. Test zakłada ułamkową ekspo
 
 ## Dane i CSV
 
-Bieżący panel cen pozostaje odrębny od świec i sygnałów. XRP/XLM: publiczny Coinbase Exchange ticker (ostatnia transakcja i bid/ask). Surowce: referencyjne metadane Yahoo chart, z możliwym niepodanym opóźnieniem; obserwowano ok. 10 minut. Odczyty co 15/30/60 sekund lub ręcznie nie gwarantują każdego ticka i nie usuwają opóźnienia źródła. Cache cen: 10 sekund. Błąd zachowuje wyłącznie oznaczoną ostatnią znaną cenę. Stare ceny transakcji: ponad 120 sekund krypto lub 600 sekund surowce. Panel zatrzymuje odczyty w demo i CSV. W ukrytej karcie zatrzymuje się, gdy nie ma aktywnych alertów. Aktywne alerty utrzymują odczyty; przeglądarka nadal może ograniczać timery kart w tle.
+Bieżący panel cen pozostaje odrębny od świec i sygnałów. XRP/XLM/BTC/ETH: publiczny Coinbase Exchange ticker (ostatnia transakcja i bid/ask). Surowce: referencyjne metadane Yahoo chart, z możliwym niepodanym opóźnieniem; obserwowano ok. 10 minut. Odczyty co 15/30/60 sekund lub ręcznie nie gwarantują każdego ticka i nie usuwają opóźnienia źródła. Cache cen: 10 sekund. Błąd zachowuje wyłącznie oznaczoną ostatnią znaną cenę. Stare ceny transakcji: ponad 120 sekund krypto lub 600 sekund surowce. Panel zatrzymuje odczyty w demo i CSV. W ukrytej karcie zatrzymuje się, gdy nie ma aktywnych alertów. Aktywne alerty utrzymują odczyty; przeglądarka nadal może ograniczać timery kart w tle.
 
 HTTPS, bez kluczy: `query1.finance.yahoo.com` i `api.exchange.coinbase.com`. TLS jest weryfikowany. Dostawcy mogą limitować żądania. Brak automatycznego podstawiania demo za błąd danych.
 
@@ -98,13 +119,13 @@ Analiza to **słownikowe tagi tytułów**: słowa o wzroście/spadku, regulacje,
 
 ## Dziennik transakcji i pomiar pozycji
 
-Wpisz instrument, long/short, ilość, mnożnik kontraktu, cenę i datę wejścia oraz **łączne koszty w USD** (prowizje, finansowanie i inne). Stop i cel są opcjonalne: formularz oblicza planowaną stratę, zysk i stosunek zysku do ryzyka po wpisanych kosztach. Luka i poślizg mogą zwiększyć rzeczywistą stratę. Dla XRP/XLM mnożnik zwykle 1; futures/CFD wymagają sprawdzenia specyfikacji brokera. Nie ma obliczania depozytu ani automatycznego przeliczania walut.
+Wpisz instrument, long/short, ilość, mnożnik kontraktu, cenę i datę wejścia oraz **łączne koszty w USD** (prowizje, finansowanie i inne). Stop i cel są opcjonalne: formularz oblicza planowaną stratę, zysk i stosunek zysku do ryzyka po wpisanych kosztach. Luka i poślizg mogą zwiększyć rzeczywistą stratę. Dla XRP/XLM/BTC/ETH mnożnik zwykle 1; futures/CFD wymagają sprawdzenia specyfikacji brokera. Nie ma obliczania depozytu ani automatycznego przeliczania walut.
 
 Aby zamknąć wpis: **Edytuj / zamknij → Stan: Zamknięta → cena i data wyjścia → Zapisz**. Częściowe wyjścia rozdziel na osobne wpisy z odpowiednio podzielonymi kosztami. Wynik netto long = (wyjście − wejście) × ilość × mnożnik − koszty; short odwraca różnicę cen. Procentowy wynik odnosi się do wartości wejściowej ekspozycji plus kosztów, nie do depozytu przy dźwigni. Otwarte pozycje wyceniamy ceną referencyjną; starsze wyceny są oznaczone, brak jakiejkolwiek ceny blokuje pełną sumę otwartych pozycji. Przeglądaj ponownie zakładkę, aby odświeżyć wycenę. Dziennik nie zawiera podatków ani automatycznej synchronizacji z brokerem. Jest oddzielony od symulowanych transakcji w Teście strategii.
 
 ## Prognozy analityków — jawna dostępność danych
 
-Dostawcy notowań używani w tej wersji **nie zapewniają spójnego automatycznego konsensusu cen docelowych** dla XRP/XLM i surowców. Licznik jest narzędziem dla **ręcznie dodanych, zweryfikowanych przez użytkownika prognoz**. Nie jest automatycznym konsensusem rynku. Nie generujemy prognoz z RSI, tonu wiadomości ani oceny zgodności grup.
+Dostawcy notowań używani w tej wersji **nie zapewniają spójnego automatycznego konsensusu cen docelowych** dla XRP/XLM/BTC/ETH i surowców. Licznik jest narzędziem dla **ręcznie dodanych, zweryfikowanych przez użytkownika prognoz**. Nie jest automatycznym konsensusem rynku. Nie generujemy prognoz z RSI, tonu wiadomości ani oceny zgodności grup.
 
 Wybierz instrument i horyzont **30/90/180/365 dni od publikacji**, podaj autora, cenę docelową, datę oraz publiczny link https. Sprawdź zgodność jednostki USD, konkretnego instrumentu (dla surowców GC=F, SI=F, CL=F), terminu kontraktu i horyzontu. Formularz wymaga potwierdzenia weryfikacji. Model nie sprawdza automatycznie treści linku. Komentarz dotyczący spółki wydobywczej, ceny spot lub innego kontraktu może nie być porównywalny.
 
@@ -126,11 +147,13 @@ node --check web/app.js
 node --check web/workspace.js
 ```
 
-`GET /api/health` → `version=1.3.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
+`GET /api/health` → `version=1.4.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
 
 Nowe API: `GET/POST /api/alerts`, `POST /api/alerts/{id}/rearm`, `DELETE /api/alerts/{id}`; `GET /api/journal`, `POST /api/trades`, `PUT/DELETE /api/trades/{id}`; `GET /api/news?instrument=XRP`; `GET /api/forecasts?instrument=XRP&horizon=90`, `POST /api/forecasts`, `DELETE /api/forecasts/{id}`; `GET /api/export`. Zapis wymaga obiektu JSON, ceny i wyniki są w USD. `GET /api/quotes` ocenia aktywne alerty i zwraca nowe `alertEvents`.
 
-Weryfikacja wersji 1.3 (2026-10-15): 69 testów jednostkowych i HTTP, test Chromium dodawania/ponownego uzbrajania alertu, trwałości po przeładowaniu, dziennika (otwarcie → edycja → zamknięcie, wynik netto), eksportu JSON, wpisanych prognoz, wiadomości oraz widoku mobilnego. Rzeczywiste pobrania: wszystkie 6 interwałów XRP, M15/H4 dla pozostałych 4 instrumentów oraz cztery kanały RSS. Testy korzystają z osobnych tymczasowych baz. `Uruchom.bat` nie był wykonywany na Windows w środowisku chmurowym.
+Weryfikacja wersji 1.4 (2026-10-16): 82 testy jednostkowe i HTTP, w tym wzorce liczbowe obliczone niezależnie wzorami zamkniętymi EMA i wygładzania Wildera. Rzeczywiste pobrania BTC/ETH we wszystkich 6 interwałach oraz bieżące ceny wszystkich 7 instrumentów. Chromium: kolory M1/M2/M3, histogramy B-Xtrender, wybór zestawu i jego zachowanie po przeładowaniu, widok mobilny bez przewijania poziomego, alert ETH, zamknięta transakcja BTC z wynikiem po kosztach, wiadomości ETH i podstawa prognozy BTC-USD. Brak błędów JavaScript. Launcher Windows nie był wykonywany natywnie w chmurze.
+
+Wcześniejsza weryfikacja wersji 1.3 (2026-10-15): 69 testów jednostkowych i HTTP, test Chromium dodawania/ponownego uzbrajania alertu, trwałości po przeładowaniu, dziennika (otwarcie → edycja → zamknięcie, wynik netto), eksportu JSON, wpisanych prognoz, wiadomości oraz widoku mobilnego. Rzeczywiste pobrania: wszystkie 6 interwałów XRP, M15/H4 dla pozostałych 4 instrumentów oraz cztery kanały RSS. Testy korzystają z osobnych tymczasowych baz. `Uruchom.bat` nie był wykonywany na Windows w środowisku chmurowym.
 
 ## Źródła reguł i ograniczeń
 

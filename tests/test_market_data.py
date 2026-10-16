@@ -88,8 +88,8 @@ class QuoteTests(unittest.TestCase):
              patch('market_data.fetch_yahoo_quote',return_value={'price':2000,'timestamp':self.now,'bid':None,'ask':None,
                    'provider':'Yahoo Finance','sourceSymbol':'GC=F','timingType':'reference','delaySeconds':None,'marketState':'unknown'})):
             result=market.get_quotes()
-        self.assertEqual(len(result['quotes']),5)
-        self.assertEqual([q['status'] for q in result['quotes']],['error','error','ok','ok','ok'])
+        self.assertEqual(len(result['quotes']),7)
+        self.assertEqual([q['status'] for q in result['quotes']],['error','error','error','error','ok','ok','ok'])
 
 
 if __name__ == '__main__':

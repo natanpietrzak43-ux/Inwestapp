@@ -3,6 +3,7 @@ import math
 
 TOOLS = {
     'ema': {'name': 'EMA 20 / 50 / 200', 'group': 'trend', 'overlay': True, 'lookback': 200, 'description': 'Kierunek trendu; okresy liczone w świecach wybranego interwału.'},
+    'ema_mercado': {'name': 'EMA 21 / 89 / 200 — M1 / M2 / M3', 'group': 'trend', 'overlay': True, 'lookback': 200, 'description': 'Konfiguracja użytkownika wg EMA en 1 Indicador (Jesús Mercado): M1=21 zielona, M2=89 biała, M3=200 czerwona. EMA z close, inicjalizacja pierwszą ceną. Trend wymaga zgodnego układu trzech średnich i ceny.'},
     'ichimoku': {'name': 'Chmura Ichimoku', 'group': 'trend', 'overlay': True, 'lookback': 78, 'description': '9 / 26 / 52, chmura przesunięta o 26 świec; cena i Tenkan/Kijun.'},
     'alligator': {'name': 'Aligator', 'group': 'trend', 'overlay': True, 'lookback': 21, 'description': 'SMMA mediany ceny: 13/8/5, przesunięcia 8/5/3.'},
     'sar': {'name': 'Parabolic SAR', 'group': 'trend', 'overlay': True, 'lookback': 3, 'description': 'Kierunek trendu; przyspieszenie 0,02 do 0,20. Nie zastępuje stopa ATR.'},
@@ -10,6 +11,7 @@ TOOLS = {
     'stochastic': {'name': 'Stochastic 14 / 3 / 3', 'group': 'momentum', 'overlay': False, 'lookback': 18, 'description': 'Wygładzony %K i %D; relacja ceny do zakresu 14 świec.'},
     'momentum': {'name': 'Momentum 10', 'group': 'momentum', 'overlay': False, 'lookback': 11, 'description': '100 × cena / cena sprzed 10 świec; poziom równowagi 100.'},
     'macd': {'name': 'MACD 12 / 26 / 9', 'group': 'momentum', 'overlay': False, 'lookback': 34, 'description': 'EMA i histogram; należy do tej samej grupy co inne oscylatory.'},
+    'bxtrender': {'name': 'B-Xtrender — QuantTherapy (lokalnie)', 'group': 'momentum', 'overlay': False, 'lookback': 16, 'description': 'RSI15(EMA5−EMA20)−50 i RSI15(EMA20)−50. Oba > 0: potwierdzenie wzrostu; oba < 0: spadku. T3(5; 0,7) i punkty zwrotne są kontekstem. To lokalna adaptacja formuł, nie usługa TradingView.'},
     'obv': {'name': 'OBV — równowaga wolumenu', 'group': 'volume', 'overlay': False, 'lookback': 25, 'description': 'Skumulowany wolumen; porównanie z EMA20 i poziomem sprzed 5 świec.'},
     'adx': {'name': 'ADX 14', 'group': 'regime', 'overlay': False, 'lookback': 28, 'description': 'ADX ≥ 20: filtr trendu; ADX < 20: filtr konsolidacji. Nie określa kierunku.'},
     'bollinger': {'name': 'Wstęgi Bollingera 20 / 2', 'group': 'context', 'overlay': True, 'lookback': 20, 'description': 'SMA20 ± 2 odchylenia standardowe; dotknięcie wstęgi samo nie jest sygnałem.'},
@@ -17,11 +19,15 @@ TOOLS = {
 }
 PRESETS = {
     'balanced': {'name': 'Trend — zestaw podstawowy', 'strategy': 'trend', 'tools': ['ema','rsi','adx','obv','bollinger']},
+    'mercado_bx': {'name': 'Trend — EMA 21/89/200 + B-Xtrender', 'strategy': 'trend', 'tools': ['ema_mercado','bxtrender','adx','obv','bollinger']},
     'cloud': {'name': 'Trend — Ichimoku', 'strategy': 'trend', 'tools': ['ichimoku','stochastic','adx','obv','sar']},
     'alligator': {'name': 'Trend — Aligator', 'strategy': 'trend', 'tools': ['alligator','momentum','adx','obv','fibonacci']},
     'range': {'name': 'Konsolidacja — Bollinger', 'strategy': 'range', 'tools': ['bollinger','stochastic','adx','obv']},
 }
 SOURCES = [
+    {'name': 'B-Xtrender Backtest Edition — link użytkownika', 'url': 'https://wild.pynesys.io/scripts/b-xtrender-backtest-edition-quanttherapy-uCWPAPT2'},
+    {'name': 'QuantTherapy: B-Xtrender — publiczna kopia Pine (Backtest Edition)', 'url': 'https://github.com/hasnocool/tradingview-pine-scripts/blob/69969aeaf271b2f7b5a7632a1bde43069a0cbe26/B-Xtrender%20%5BBacktest%20Edition%5D%20%40QuantTherapy.pine'},
+    {'name': 'Tillson T3: jawna implementacja pomocnicza', 'url': 'https://github.com/Zool-in/StockScreener/blob/1c565330b9beb2eacfa758338ca1212b614d1fc0/js/core/math.js'},
     {'name': 'StockCharts: Ichimoku', 'url': 'https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/ichimoku-cloud'},
     {'name': 'StockCharts: Bollinger', 'url': 'https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/bollinger-bands'},
     {'name': 'StockCharts: OBV', 'url': 'https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/on-balance-volume-obv'},
@@ -116,7 +122,10 @@ def extra_indicators(bars, ema, wilder):
 def tool_reading(tool, bar, ind, strategy):
     c=bar['close'];value=None;bull=bear=False;available=True
     def ready(*keys):return all(ind.get(key) is not None for key in keys)
-    if tool=='ema':
+    if tool=='ema_mercado':
+        available=ready('emaM1','emaM2','emaM3') and bool(ind.get('emaMercadoReady'));value=ind.get('emaM3')
+        if available:bull=c>ind['emaM1']>ind['emaM2']>ind['emaM3'];bear=c<ind['emaM1']<ind['emaM2']<ind['emaM3']
+    elif tool=='ema':
         available=ready('ema20','ema50','ema200');value=ind.get('ema200')
         if available:bull=c>ind['ema200'] and ind['ema20']>ind['ema50'];bear=c<ind['ema200'] and ind['ema20']<ind['ema50']
     elif tool=='ichimoku':
@@ -142,6 +151,9 @@ def tool_reading(tool, bar, ind, strategy):
     elif tool=='macd':
         available=ready('macdHist');value=ind.get('macdHist')
         if available:bull=value>0;bear=value<0
+    elif tool=='bxtrender':
+        available=ready('bxShort','bxLong','bxT3');value=ind.get('bxShort')
+        if available:bull=ind['bxShort']>0 and ind['bxLong']>0;bear=ind['bxShort']<0 and ind['bxLong']<0
     elif tool=='obv':
         available=ready('obv','obvEma','obvPrevious') and bool(ind.get('hasVolume'));value=ind.get('obv')
         if available:bull=value>ind['obvEma'] and value>ind['obvPrevious'];bear=value<ind['obvEma'] and value<ind['obvPrevious']

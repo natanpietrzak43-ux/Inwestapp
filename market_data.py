@@ -12,6 +12,8 @@ QUOTE_CACHE_SECONDS = 10
 INSTRUMENTS = {
     'XRP': {'name': 'XRP', 'symbol': 'XRP-USD', 'kind': 'crypto', 'description': 'XRP / USD · rynek spot'},
     'XLM': {'name': 'Stellar', 'symbol': 'XLM-USD', 'kind': 'crypto', 'description': 'XLM / USD · rynek spot'},
+    'BTC': {'name': 'Bitcoin', 'symbol': 'BTC-USD', 'kind': 'crypto', 'description': 'BTC / USD · rynek spot'},
+    'ETH': {'name': 'Ethereum', 'symbol': 'ETH-USD', 'kind': 'crypto', 'description': 'ETH / USD · rynek spot'},
     'SILVER': {'name': 'Srebro', 'symbol': 'SI=F', 'kind': 'commodity', 'description': 'Silver futures · cena referencyjna'},
     'OIL': {'name': 'Ropa WTI', 'symbol': 'CL=F', 'kind': 'commodity', 'description': 'WTI futures · cena referencyjna'},
     'GOLD': {'name': 'Złoto', 'symbol': 'GC=F', 'kind': 'commodity', 'description': 'Gold futures · cena referencyjna'},
@@ -21,7 +23,7 @@ _LOCKS = {key: threading.Lock() for key in INSTRUMENTS}
 
 
 def read_json(url):
-    request = urllib.request.Request(url, headers={'User-Agent': 'Inwestapp/1.1', 'Accept': 'application/json'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Inwestapp/1.4', 'Accept': 'application/json'})
     with urllib.request.urlopen(request, timeout=12) as response:
         return json.load(response)
 
@@ -107,6 +109,6 @@ def get_quote(key):
 
 def get_quotes(keys=None):
     keys = list(INSTRUMENTS) if keys is None else keys
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    with ThreadPoolExecutor(max_workers=min(8,max(1,len(keys)))) as pool:
         quotes = list(pool.map(get_quote, keys))
     return {'quotes': quotes, 'fetchedAt': datetime.now(timezone.utc).isoformat(), 'cacheSeconds': QUOTE_CACHE_SECONDS}

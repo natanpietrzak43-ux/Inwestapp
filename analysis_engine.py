@@ -1,5 +1,6 @@
 """Closed OHLCV analysis and conservative, next-open long-only simulation."""
 import math
+from custom_indicators import mercado_indicators, bxtrender_indicators
 from datetime import datetime, timezone
 from timeframes import candle_time, candle_closed
 from technical_tools import extra_indicators, combined_decision, selection
@@ -83,7 +84,9 @@ def indicators(bars):
                        'support': min(b['low'] for b in bars[max(0,i-20):i]) if i else None,
                        'resistance': max(b['high'] for b in bars[max(0,i-20):i]) if i else None})
     extra=extra_indicators(bars,ema,wilder)
-    return [{**ind,**additional} for ind,additional in zip(result,extra)]
+    mercado=mercado_indicators(close)
+    bx=bxtrender_indicators(close)
+    return [{**ind,**additional,**new,**osc} for ind,additional,new,osc in zip(result,extra,mercado,bx)]
 
 
 def decision(bar, ind, tools=None, strategy='trend'):

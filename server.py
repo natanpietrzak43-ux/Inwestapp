@@ -29,7 +29,7 @@ LOCK = threading.Lock()
 
 def demo_bars(key, timeframe='1d'):
     rng = random.Random(key + '-inwestapp-v1')
-    price = {'XRP': 1.8, 'XLM': .24, 'SILVER': 30, 'OIL': 68, 'GOLD': 2500}[key]
+    price = {'XRP': 1.8, 'XLM': .24, 'BTC': 65000, 'ETH': 2500, 'SILVER': 30, 'OIL': 68, 'GOLD': 2500}[key]
     today = datetime.now(timezone.utc).replace(minute=0,second=0,microsecond=0)
     if timeframe=='1d':today=today.replace(hour=0)
     bars = []
@@ -38,7 +38,7 @@ def demo_bars(key, timeframe='1d'):
         if INSTRUMENTS[key]['kind'] != 'crypto' and date.weekday() > 4:
             continue
         op = price * math.exp(rng.gauss(0, .003))
-        volatility = (.024 if key in ('XRP', 'XLM') else .012)/math.sqrt(86400/TIMEFRAMES[timeframe]['seconds'])
+        volatility = (.024 if INSTRUMENTS[key]['kind']=='crypto' else .012)/math.sqrt(86400/TIMEFRAMES[timeframe]['seconds'])
         price = op * math.exp(.0004 + .002 * math.sin(i / 45) + rng.gauss(0, volatility))
         bars.append({'date': date.isoformat() if timeframe!='1d' else date.strftime('%Y-%m-%d'), 'open': op, 'high': max(op, price) * (1+rng.uniform(.001, .015)),
                      'low': min(op, price) * (1-rng.uniform(.001, .015)), 'close': price, 'volume': rng.randint(100000, 300000)})
@@ -115,7 +115,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'version': '1.3.0', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': '1.4.0', 'instruments': list(INSTRUMENTS)})
         if parsed.path=='/api/catalog':
             return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES})
         if parsed.path == '/api/quotes':
@@ -229,7 +229,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f'http://{args.host}:{args.port}'
-    print(f'Inwestapp v1.3: {url}', flush=True)
+    print(f'Inwestapp v1.4: {url}', flush=True)
     if args.open_browser:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
     try:

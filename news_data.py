@@ -12,7 +12,7 @@ from email.utils import parsedate_to_datetime
 
 FEEDS=[('CoinDesk','https://www.coindesk.com/arc/outboundfeeds/rss/'),
        ('Cointelegraph','https://cointelegraph.com/rss'),('EIA','https://www.eia.gov/rss/todayinenergy.xml')]
-QUERIES={'XRP':'XRP Ripple cryptocurrency','XLM':'XLM Stellar Lumens','GOLD':'gold price commodity','SILVER':'silver price commodity','OIL':'WTI crude oil price'}
+QUERIES={'BTC':'Bitcoin BTC cryptocurrency','ETH':'Ethereum ETH cryptocurrency','XRP':'XRP Ripple cryptocurrency','XLM':'XLM Stellar Lumens','GOLD':'gold price commodity','SILVER':'silver price commodity','OIL':'WTI crude oil price'}
 CACHE={};LOCK=threading.Lock()
 
 
@@ -27,6 +27,8 @@ def matches(key,text):
     text=text.casefold()
     if key=='XRP':return bool(re.search(r'\bxrp\b',text) or ('ripple' in text and re.search(r'crypto|token|blockchain|payment',text)))
     if key=='XLM':return bool(re.search(r'\bxlm\b|stellar lumens',text) or ('stellar' in text and re.search(r'blockchain|token|network|crypto',text)))
+    if key=='BTC':return bool(re.search(r'\bbitcoin\b|\bbtc\b',text))
+    if key=='ETH':return bool(re.search(r'\bethereum\b|\beth\b|\bether\b',text))
     if key=='GOLD':return bool(re.search(r'\bgold\b',text))
     if key=='SILVER':return bool(re.search(r'\bsilver\b',text) and 'silver lining' not in text)
     return bool(re.search(r'\boil\b|\bcrude\b|\bwti\b|\bopec\b|petroleum',text))

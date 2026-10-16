@@ -71,13 +71,13 @@ class HttpTests(unittest.TestCase):
         self.assertFalse(any(a['id']==alert['id'] for a in self.request('/api/alerts')[1]['alerts']))
 
     def test_news_and_forecast_routes_reject_invalid_instrument(self):
-        for path in ('/api/news?instrument=BTC','/api/forecasts?instrument=BTC'):
+        for path in ('/api/news?instrument=DOGE','/api/forecasts?instrument=DOGE'):
             self.assertEqual(self.request(path)[0],400)
         example={'items':[],'sources':[],'notice':'test'}
         with patch('server.get_news',return_value=example):self.assertEqual(self.request('/api/news?instrument=XRP'),(200,example))
 
     def test_all_demo_routes(self):
-        for key in ('XRP','XLM','SILVER','OIL','GOLD'):
+        for key in ('XRP','XLM','BTC','ETH','SILVER','OIL','GOLD'):
             status,result=self.request('/api/analyze?mode=demo&instrument='+key)
             self.assertEqual(status,200)
             self.assertEqual(result['decision']['action'],'WAIT')
@@ -109,7 +109,7 @@ class HttpTests(unittest.TestCase):
             self.assertEqual(self.request('/api/import',body)[0],400)
 
     def test_invalid_parameters_and_instrument(self):
-        self.assertEqual(self.request('/api/analyze?instrument=BTC')[0],400)
+        self.assertEqual(self.request('/api/analyze?instrument=DOGE')[0],400)
         self.assertEqual(self.request('/api/analyze?mode=demo&risk=9')[0],400)
         self.assertEqual(self.request('/api/analyze?mode=demo&capital=nan')[0],400)
 
@@ -121,12 +121,12 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status,200)
         self.assertEqual(result['quotes'],example['quotes'])
         self.assertEqual(result['alertEvents'],[])
-        self.assertEqual(self.request('/api/quotes?instrument=BTC')[0],400)
+        self.assertEqual(self.request('/api/quotes?instrument=DOGE')[0],400)
 
     def test_catalog_defaults_and_empty_selection(self):
         status,catalog=self.request('/api/catalog')
         self.assertEqual(status,200)
-        self.assertEqual(len(catalog['tools']),12)
+        self.assertEqual(len(catalog['tools']),14)
         status,result=self.request('/api/analyze?mode=demo&tools=')
         self.assertEqual(status,200)
         self.assertEqual(result['timeframe'],'1h')
