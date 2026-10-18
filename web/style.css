@@ -19,3 +19,6 @@
 .coin.btc{background:#fff1dd;color:#b97a23}.coin.eth{background:#eef0fa;color:#6975a2}.quote-cards{grid-template-columns:repeat(auto-fit,minmax(155px,1fr))}
 .indicator-card[data-tool="bxtrender"]{grid-column:1/-1}.indicator-card[data-tool="bxtrender"] .oscillator-chart{height:220px}
 @media(max-width:800px){.quote-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.indicator-card[data-tool="bxtrender"] .card-head{flex-wrap:wrap}.indicator-card[data-tool="bxtrender"] .oscillator-chart{height:180px}}
+.bot-details{margin:18px 0}.bot-details summary{cursor:pointer;font-weight:600;font-size:12px}.bot-details pre,#mcp-schema{white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto;font-size:11px;line-height:1.8}.workspace-form textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:7px;font:12px monospace;color:var(--ink)}#bot-position{margin:20px 0;line-height:1.9;font-size:12px}#bot-summary .metric strong{font-size:20px}
+
+#lab-results .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}

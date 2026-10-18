@@ -1,6 +1,6 @@
-# Inwestapp 1.4
+# Inwestapp 1.5
 
-Prywatny warsztat analizy technicznej XRP, XLM, BTC/USD, ETH/USD, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, pięć gotowych zestawów, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji i licznik wpisanych prognoz. Brak zleceń automatycznych, kont i połączenia z brokerem.
+Prywatny warsztat analizy technicznej XRP, XLM, BTC/USD, ETH/USD, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, pięć gotowych zestawów, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji, licznik wpisanych prognoz oraz bot papierowy i laboratorium strategii. Brak rzeczywistych zleceń i połączenia z brokerem.
 
 ## Uruchomienie i aktualizacja na Windows
 
@@ -16,6 +16,43 @@ python server.py --host 127.0.0.1 --port 8000
 ```
 
 macOS/Linux: użyj `python3`. Brak zewnętrznych zależności. Opcja `--open-browser` otwiera przeglądarkę. Nie wystawiaj tego serwera bez uwierzytelniania do Internetu. W onboardingu chmurowym podgląd localhost nie jest udostępniany; używamy lokalnych żądań do weryfikacji.
+
+## Aktualizacja 1.5 — bot papierowy i laboratorium
+
+Otwórz **Bot i strategie**. Aplikacja nie ma połączenia do wysyłania zleceń na giełdę/brokera. Bot działa wyłącznie na papierowym koncie USD i nie korzysta z kluczy transakcyjnych.
+
+1. Wybierz instrument, interwał, jeden z pięciu lokalnych zestawów, kapitał początkowy, ryzyko, prowizję i poślizg w pb na stronę oraz limit straty dnia UTC.
+2. Kliknij **Uruchom bota papierowego**. Cykl wykonuje się około co 15 sekund w procesie serwera. Przeglądarka może być zamknięta; komputer i serwer muszą pracować. Po ponownym uruchomieniu serwera aktywny bot wznawia się z zapisanego stanu.
+3. Sygnały pochodzą z zamkniętych świec. Wejście wymaga zgodności wszystkich wybranych grup oraz istniejącej blokady historycznej BUY. Ta blokada ocenia rdzeń reguł na historii, z kosztami i ustawionym poślizgiem; nie jest dowodem zyskowności. Częste „czekaj” oznacza brak spełnienia reguł, a nie błąd instalacji.
+4. Po decyzji bot oczekuje na pierwszy zaobserwowany świeży odczyt **z czasem notowania nie wcześniejszym niż decyzja**. Nie wpisuje fikcyjnego wejścia po historycznej cenie. Oczekujące zlecenie wygasa po 20 minutach. Krypto dopuszcza wiek ceny 120 s, surowce 1200 s; opóźnione notowania referencyjne mogą opóźniać papierowe wykonanie.
+5. Maksymalnie jedna pozycja long, bez dźwigni. Wielkość wyznacza ryzyko i dostępna gotówka. Stop = 2 ATR, cel = 3 ATR. Zakup obejmuje dodatni poślizg i prowizję; sprzedaż ujemny poślizg i prowizję. To szacunki, bez symulacji arkusza zleceń, płynności i realnego wykonania.
+6. Stop/cel są oceniane na dostępnych odczytach cen. Nie wykryjemy każdego ruchu pomiędzy odczytami ani podczas awarii/uśpienia. Po luce realizacja jest symulowana po pierwszej zaobserwowanej cenie, a strata może przekroczyć plan.
+7. Limit straty dnia porównuje kapitał po kosztach likwidacji z pierwszą dostępną wyceną dnia UTC. Przekroczenie wyłącza nowe wejścia i zamyka papierową pozycję po dostępnej świeżej cenie. Bot nie uruchamia się automatycznie następnego dnia — użytkownik musi ponownie kliknąć Start. Restart/Start tego samego dnia nie zeruje punktu odniesienia limitu.
+8. **Zatrzymaj nowe wejścia** anuluje oczekujące kupno. Stop/cel otwartej pozycji nadal działają podczas pracy serwera. **Zamknij papierową pozycję** kolejkuje wyjście po kolejnym świeżym odczycie. Samo zamknięcie przeglądarki nie zatrzymuje bota.
+
+Kapitał początkowy po pierwszej zamkniętej transakcji jest stały. Konfiguracji otwartej pozycji nie można zmienić bez jej zamknięcia. Konto i wszystkie transakcje/zdarzenia są trwałe w tej samej lokalnej bazie SQLite, ale oddzielone od ręcznego dziennika. UI pokazuje ostatnie 200 transakcji i 100 zdarzeń; pełne tabele obejmuje eksport JSON i kopia bazy. Surowce oznaczają ułamkową referencyjną ekspozycję z mnożnikiem 1, nie kontrakt futures/CFD. Brak podatków, finansowania i przeliczeń walut.
+
+### Porównanie strategii
+
+W tym samym panelu wybierz źródło **Yahoo / demonstracja / wcześniej importowany CSV** i kliknij **Porównaj strategie**. Minimalnie 400 świec. Wszystkie pięć lokalnych zestawów dostaje ten sam okres, kapitał, ryzyko, prowizje i poślizg. Pokazujemy wynik, liczbę transakcji, profit factor i maksymalne obsunięcie.
+
+Pierwsze 200 świec to rozgrzewka. Kolejne 70% dostępnego okresu to część początkowa; końcowe 30% jest testowane od osobnego portfela z takim samym kapitałem, bez pozycji przeniesionej z początku. Wskaźniki w końcowym teście mogą korzystać z wcześniejszej historii; pierwsze otwarcie testu może wykonać sygnał z ostatniej świecy części początkowej. Obliczenia wskaźników nie używają przyszłych cen. Nie optymalizujemy parametrów i nie wybieramy automatycznie zwycięzcy.
+
+Minimalny **filtr badawczy** wymaga 30 zamkniętych transakcji początkowych i 10 końcowych, dodatniego wyniku oraz określonego profit factor > 1 w obu częściach. Przejście nie dowodzi przewagi. Ponowne wybieranie zestawu po obejrzeniu końcowego wyniku odbiera temu fragmentowi niezależność. To porównanie stałych modeli, nie automatyczna optymalizacja/walidacja krocząca. Dodatni wynik nie aktywuje bota.
+
+Test historyczny symuluje wejście na kolejnym otwarciu i poślizg/prowizję po obu stronach; bot papierowy używa pierwszej świeżej obserwacji po decyzji. Wyniki nie muszą być identyczne. Dotychczasowy Test strategii w Przeglądzie zachowuje domyślny dodatkowy poślizg 0 pb; laboratorium i bot domyślnie mają 5 pb. Raporty jawnie oceniają rdzeń reguł bez historycznego stosowania blokady BUY.
+
+### Globalny MCP trader.dev w chmurze
+
+Na żądanie użytkownika dodano globalny wpis Codex CLI **trader-dev** w tej chmurze. Korzysta z mostka Node i przypiętego `mcp-remote@0.15.1`. Mostek obsługuje sieciowe proxy (`--enable-proxy`), ma prywatne katalogi cache/auth i usuwa klucz z wyjścia stdout/stderr. Klucz jest poza repozytorium, w prywatnym `~/.codex/trader-dev/api-key` (0600); wpis Codexa wskazuje plik mostka i nie zawiera wartości klucza. Narzędzie `mcp-remote` otrzymuje klucz w parametrze URL swojego procesu potomnego. Konfiguracja nie jest instalowana na komputerze Windows ani w innych aplikacjach; nowe sesje Codexa odczytają globalny wpis. Lista narzędzi bieżącego czatu nie jest automatycznie przeładowywana.
+
+**Potwierdzony blokujący problem dostawcy (2026-10-18):** żądanie inicjalizacji klienta aplikacji otrzymało HTTP 403 z Cloudflare **1010 / browser_signature_banned**, `owner_action_required=true`. Usługa odrzuca połączenie klienta aplikacji z tej chmury. Zalecany klient Node mcp-remote, z domyślną tożsamością i obsługą proxy, również nie zakończył inicjalizacji w limicie 35 sekund; nie potwierdzono jego dostępu. Nie potwierdzono ważności klucza i nie pobrano katalogu ani strategii. Zapisany wpis MCP nie oznacza działającego dostępu. Znany błąd zapisano w `~/.codex/trader-dev/access-status.json`; aplikacja i mostek nie ponawiają automatycznie połączeń. Dostęp musi dopuścić właściciel trader.dev; nie obchodzimy blokady przez zmianę tożsamości klienta.
+
+Po uzyskaniu potwierdzenia od właściciela usługi, że dostęp odblokowano, usuń **wyłącznie** `access-status.json`, uruchom ponownie lokalny serwer/Codexa i kliknij **Sprawdź połączenie MCP**. Zachowaj `api-key`. Błąd 1010 nie ustala, czy klucz API jest poprawny. Skrypt odtworzenia globalnego wpisu to `python tools/configure_mcp.py` (wymaga Codex CLI, Node, npx i uprawnień do jego aktywnej konfiguracji). Pyta o klucz w ukrytym polu, ewentualnie czyta `TRADER_DEV_API_KEY`; nie wpisuj sekretu do plików projektu. W zarządzanej chmurze aktywna konfiguracja może wymagać wykonania `codex mcp add` z przyznanym uprawnieniem zapisu. Nie zmieniaj zmiennej platformowej CODEX_HOME.
+
+Aplikacyjny klient MCP czyta `TRADER_DEV_API_KEY` lub prywatny plik powyżej. Brak klucza na innym komputerze jest pokazywany jako brak konfiguracji; sekretu nie przenosimy ZIP-em. API `/api/mcp/status` ujawnia tylko status/bezpieczne metadane, nigdy klucz. Po udanym połączeniu wyświetla tylko narzędzia badawcze dotyczące strategii, bez narzędzi zleceń, usuwania, wdrożeń lub danych uwierzytelniających. Można wywołać wybrane narzędzie z argumentami JSON i zapisać odpowiedź jako **niezweryfikowany materiał źródłowy**. Zewnętrzny tekst jest wyświetlany jako tekst, nie instrukcje/kod.
+
+**Laboratorium wykonuje wyłącznie lokalnie zaimplementowane zestawy Inwestapp. Nie uruchamia pobranych skryptów Pine/Pythona i nie potwierdza zgodności ich reguł ani deklarowanych zysków.** Inna strategia z rynku wymaga osobnego przepisania i walidacji. MCP jest opcjonalne: jego blokada nie zatrzymuje bota papierowego i testów lokalnych. Do aplikacji Python nie dodano zależności; Node/npx są potrzebne tylko do globalnego mostka Codexa.
 
 ## Aktualizacja 1.4 — nowe narzędzia i instrumenty
 
@@ -145,15 +182,21 @@ Serwer domyślnie nasłuchuje tylko na 127.0.0.1. Sprawdza lokalny nagłówek Ho
 python -m unittest discover -s tests -v
 node --check web/app.js
 node --check web/workspace.js
+node --check web/bot.js
+node --check tools/trader_mcp_bridge.cjs
 ```
 
-`GET /api/health` → `version=1.4.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
+`GET /api/health` → `version=1.5.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
 
 Nowe API: `GET/POST /api/alerts`, `POST /api/alerts/{id}/rearm`, `DELETE /api/alerts/{id}`; `GET /api/journal`, `POST /api/trades`, `PUT/DELETE /api/trades/{id}`; `GET /api/news?instrument=XRP`; `GET /api/forecasts?instrument=XRP&horizon=90`, `POST /api/forecasts`, `DELETE /api/forecasts/{id}`; `GET /api/export`. Zapis wymaga obiektu JSON, ceny i wyniki są w USD. `GET /api/quotes` ocenia aktywne alerty i zwraca nowe `alertEvents`.
 
-Weryfikacja wersji 1.4 (2026-10-16): 82 testy jednostkowe i HTTP, w tym wzorce liczbowe obliczone niezależnie wzorami zamkniętymi EMA i wygładzania Wildera. Rzeczywiste pobrania BTC/ETH we wszystkich 6 interwałach oraz bieżące ceny wszystkich 7 instrumentów. Chromium: kolory M1/M2/M3, histogramy B-Xtrender, wybór zestawu i jego zachowanie po przeładowaniu, widok mobilny bez przewijania poziomego, alert ETH, zamknięta transakcja BTC z wynikiem po kosztach, wiadomości ETH i podstawa prognozy BTC-USD. Brak błędów JavaScript. Launcher Windows nie był wykonywany natywnie w chmurze.
+Weryfikacja wersji 1.5 (2026-10-18): 115 testów jednostkowych/HTTP, w tym następstwo decyzji/ceny, koszty i poślizg obu stron, brak podwójnych transakcji, limit dzienny, stop, zachowanie ochrony po zatrzymaniu, wygaśnięcie zleceń, oddzielenie portfeli testowych, brak wpływu przyszłych cen na początkowy okres, protokół MCP JSON/SSE i usuwanie sekretów z wyjścia mostka. Rzeczywiste porównanie na 4391 świecach H1 BTC z kosztami 10 pb i poślizgiem 5 pb na stronę (1258 świec końcowego testu); żaden z pięciu zestawów nie przeszedł minimalnego filtra badawczego w tym sprawdzeniu. Przeglądarka Chromium: uruchomienie/zatrzymanie i trwałość konfiguracji bota na rzeczywistych danych BTC, porównanie pięciu zestawów na demonstracji, jawny komunikat blokady MCP 1010, brak błędów JS i przewijania poziomego na telefonie. Globalny wpis MCP potwierdzono poleceniem Codex CLI; połączenie z dostawcą pozostaje zablokowane.
+
+Wcześniejsza weryfikacja wersji 1.4 (2026-10-16): 82 testy jednostkowe i HTTP, w tym wzorce liczbowe obliczone niezależnie wzorami zamkniętymi EMA i wygładzania Wildera. Rzeczywiste pobrania BTC/ETH we wszystkich 6 interwałach oraz bieżące ceny wszystkich 7 instrumentów. Chromium: kolory M1/M2/M3, histogramy B-Xtrender, wybór zestawu i jego zachowanie po przeładowaniu, widok mobilny bez przewijania poziomego, alert ETH, zamknięta transakcja BTC z wynikiem po kosztach, wiadomości ETH i podstawa prognozy BTC-USD. Brak błędów JavaScript. Launcher Windows nie był wykonywany natywnie w chmurze.
 
 Wcześniejsza weryfikacja wersji 1.3 (2026-10-15): 69 testów jednostkowych i HTTP, test Chromium dodawania/ponownego uzbrajania alertu, trwałości po przeładowaniu, dziennika (otwarcie → edycja → zamknięcie, wynik netto), eksportu JSON, wpisanych prognoz, wiadomości oraz widoku mobilnego. Rzeczywiste pobrania: wszystkie 6 interwałów XRP, M15/H4 dla pozostałych 4 instrumentów oraz cztery kanały RSS. Testy korzystają z osobnych tymczasowych baz. `Uruchom.bat` nie był wykonywany na Windows w środowisku chmurowym.
+
+API 1.5: `GET /api/bot`, `POST /api/bot/start`, `/api/bot/stop`, `/api/bot/close`; `POST /api/strategies/test` (instrument/timeframe/mode/capital/risk/costs/slippage, opcjonalnie csv); `GET /api/mcp/status`, `POST /api/mcp/research` (tool, arguments), `GET /api/strategies/research`. Bot odrzuca tryb inny niż paper i nie ma endpointu rzeczywistych zleceń. Eksport JSON obejmuje także tabele bota i materiały źródłowe.
 
 ## Źródła reguł i ograniczeń
 

@@ -23,7 +23,7 @@ _LOCKS = {key: threading.Lock() for key in INSTRUMENTS}
 
 
 def read_json(url):
-    request = urllib.request.Request(url, headers={'User-Agent': 'Inwestapp/1.4', 'Accept': 'application/json'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Inwestapp/1.5', 'Accept': 'application/json'})
     with urllib.request.urlopen(request, timeout=12) as response:
         return json.load(response)
 

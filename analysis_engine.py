@@ -109,11 +109,14 @@ def risk_plan(bar, ind, capital, risk, costs):
             'notional': units * entry, 'riskBudget': capital * risk / 100, 'rewardRisk': 1.5}
 
 
-def backtest(bars, inds, capital=10000, risk=1, costs=10, tools=None, strategy='trend'):
+def backtest(bars, inds, capital=10000, risk=1, costs=10, tools=None, strategy='trend', start_index=200, slippage=0):
+    slip=float(slippage)/10000
+    if not math.isfinite(slip) or not 0<=slip<=.01:raise ValueError('Poślizg: 0–100 pb na stronę.')
     cash, fee, position = capital, costs / 10000, None
     trades, equity = [], []
-    first = 200
-    benchmark_units = capital / (bars[first]['open'] * (1 + fee))
+    first = int(start_index)
+    if not 200<=first<len(bars):raise ValueError('Początek testu musi mieć 200 świec rozgrzewki i co najmniej jedną świecę testu.')
+    benchmark_units = capital / (bars[first]['open'] * (1 + slip) * (1 + fee))
     for i in range(first, len(bars)):
         bar = bars[i]
         prior = decision(bars[i-1], inds[i-1], tools, strategy)
@@ -126,7 +129,7 @@ def backtest(bars, inds, capital=10000, risk=1, costs=10, tools=None, strategy='
             elif prior['action'] == 'SELL':
                 exit_price, reason = bar['open'], 'Sygnał wyjścia'
         elif prior['action'] == 'BUY':
-            plan = risk_plan({'close': bar['open']}, inds[i-1], cash, risk, costs)
+            plan = risk_plan({'close': bar['open']*(1+slip)}, inds[i-1], cash, risk, costs)
             if plan['units'] > 0:
                 position = {**plan, 'date': bar['date'], 'entryFee': plan['notional'] * fee}
                 cash -= plan['notional'] * (1 + fee)
@@ -137,14 +140,15 @@ def backtest(bars, inds, capital=10000, risk=1, costs=10, tools=None, strategy='
             elif bar['high'] >= position['target']:
                 exit_price, reason = position['target'], 'Take profit'
         if position and exit_price is not None:
+            exit_price*=1-slip
             proceeds = position['units'] * exit_price * (1 - fee)
             pnl = proceeds - position['notional'] - position['entryFee']
             cash += proceeds
             trades.append({'entryDate': position['date'], 'exitDate': bar['date'], 'entry': position['entry'], 'exit': exit_price,
                            'units': position['units'], 'pnl': pnl, 'reason': reason})
             position = None
-        value = cash + (position['units'] * bar['close'] * (1 - fee) if position else 0)
-        equity.append({'date': bar['date'], 'value': value, 'benchmark': benchmark_units * bar['close'] * (1 - fee)})
+        value = cash + (position['units'] * bar['close'] * (1 - slip) * (1 - fee) if position else 0)
+        equity.append({'date': bar['date'], 'value': value, 'benchmark': benchmark_units * bar['close'] * (1 - slip) * (1 - fee)})
     peak, drawdown = capital, 0
     for row in equity:
         peak = max(peak, row['value'])
@@ -158,7 +162,7 @@ def backtest(bars, inds, capital=10000, risk=1, costs=10, tools=None, strategy='
             'winRate': sum(t['pnl'] > 0 for t in trades)/len(trades)*100 if trades else None,
             'profitFactor': gains/losses if losses else None, 'openPosition': position,
             'holdoutDate': split_date, 'holdoutTrades': len(holdout), 'holdoutPnl': sum(t['pnl'] for t in holdout),
-            'sampleWarning': len(trades) < 30, 'startDate': bars[first]['date'], 'endDate': bars[-1]['date'], 'coreRulesOnly':True}
+            'sampleWarning': len(trades) < 30, 'startDate': bars[first]['date'], 'endDate': bars[-1]['date'], 'coreRulesOnly':True,'slippageBps':float(slippage)}
 
 
 def history_guard(stats):
@@ -170,12 +174,12 @@ def history_guard(stats):
     return {'passed':not reasons,'reasons':reasons,'description':'Heurystyczna blokada nowych wejść, bez gwarancji skuteczności. Test przedstawia rdzeń reguł; nie symuluje tej bramki w przeszłości.'}
 
 
-def analyze(bars, capital=10000, risk=1, costs=10, timeframe='1d', tools=None, strategy='trend'):
+def analyze(bars, capital=10000, risk=1, costs=10, timeframe='1d', tools=None, strategy='trend', slippage=0):
     bars = validate_bars(bars,timeframe)
     tools=selection(tools,strategy)
     capital, risk, costs = parameters(capital, risk, costs)
     inds = indicators(bars)
-    stats=backtest(bars,inds,capital,risk,costs,tools,strategy)
+    stats=backtest(bars,inds,capital,risk,costs,tools,strategy,slippage=slippage)
     current=decision(bars[-1],inds[-1],tools,strategy)
     guard=history_guard(stats)
     current['technicalAction']=current['action']

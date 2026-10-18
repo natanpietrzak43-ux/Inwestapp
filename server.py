@@ -5,6 +5,9 @@ import io
 import json
 import random
 import sqlite3
+import paper_bot
+import trader_mcp
+import strategy_lab
 import user_data
 from news_data import get_news
 import math
@@ -74,8 +77,8 @@ def fetch_bars(key, timeframe='1h'):
     return bars, fetched
 
 
-def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d', tools=None, strategy='trend'):
-    result = analyze(bars, capital, risk, costs,timeframe,tools,strategy)
+def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d', tools=None, strategy='trend', slippage=0):
+    result = analyze(bars, capital, risk, costs,timeframe,tools,strategy,slippage)
     age_seconds=max(0,(datetime.now(timezone.utc)-candle_time(bars[-1]['date'],timeframe)).total_seconds())
     age=age_seconds/86400
     threshold=max(TIMEFRAMES[timeframe]['seconds']*3, (3 if INSTRUMENTS[key]['kind']=='crypto' else 6)*3600) if timeframe!='1d' else (2 if INSTRUMENTS[key]['kind']=='crypto' else 4)*86400
@@ -115,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'version': '1.4.0', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': '1.5.0', 'instruments': list(INSTRUMENTS)})
         if parsed.path=='/api/catalog':
             return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES})
         if parsed.path == '/api/quotes':
@@ -149,6 +152,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(package(key, bars, mode, *args, fetched=fetched,timeframe=timeframe,tools=tools,strategy=strategy))
             except (ValueError, KeyError, TypeError, IndexError) as exc:
                 return self.send_json({'error': str(exc)}, 400)
+        if parsed.path in ('/api/bot','/api/mcp/status','/api/strategies/research'):
+            try:
+                if parsed.path=='/api/bot':return self.send_json(paper_bot.status())
+                if parsed.path=='/api/mcp/status':return self.send_json(trader_mcp.status())
+                return self.send_json({'records':paper_bot.research_records()})
+            except (ValueError,TypeError) as exc:return self.send_json({'error':str(exc)},400)
+            except (sqlite3.Error,OSError):return self.send_json({'error':'Dane bota są niedostępne.'},503)
         if parsed.path in ('/api/alerts','/api/journal','/api/export','/api/forecasts','/api/news'):
             try:
                 query=urllib.parse.parse_qs(parsed.query)
@@ -165,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(user_data.forecast_summary(key,horizon,quote))
             except (ValueError,TypeError,KeyError) as exc:return self.send_json({'error':str(exc)},400)
             except (sqlite3.Error,OSError):return self.send_json({'error':'Baza danych jest niedostępna.'},503)
-        paths = {'/workspace.js':'workspace.js', '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+        paths = {'/bot.js':'bot.js','/workspace.js':'workspace.js', '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
         if parsed.path not in paths:
             return self.send_json({'error': 'Nie znaleziono.'}, 404)
         file = ROOT / paths[parsed.path]
@@ -191,6 +201,20 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<length<=9_000_000:raise ValueError('Żądanie może mieć maksymalnie 9 MB.')
             body=json.loads(self.rfile.read(length))
             if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
+            if method=='POST' and self.path in ('/api/bot/start','/api/bot/stop','/api/bot/close','/api/strategies/test','/api/mcp/research'):
+                if self.path=='/api/bot/start':return self.send_json(paper_bot.start(body))
+                if self.path=='/api/bot/stop':return self.send_json(paper_bot.stop())
+                if self.path=='/api/bot/close':return self.send_json(paper_bot.close_position())
+                if self.path=='/api/mcp/research':return self.send_json(paper_bot.save_research(trader_mcp.fetch_research(body.get('tool'),body.get('arguments'))))
+                config=paper_bot.configuration(body);key=config['instrument'];tf=config['timeframe'];mode=body.get('mode','live')
+                if mode=='live':
+                    try:bars,_=fetch_bars(key,tf)
+                    except Exception:return self.send_json({'error':'Brak historii od dostawcy; nie podstawiono demonstracji.'},502)
+                elif mode=='demo':bars=demo_bars(key,tf)
+                elif mode=='csv' and isinstance(body.get('csv'),str):bars=list(csv.DictReader(io.StringIO(body['csv'].lstrip('\ufeff'))))
+                else:raise ValueError('Wybierz live, demo lub wcześniej importowany CSV.')
+                report=strategy_lab.compare(bars,tf,config['capital'],config['risk'],config['costs'],config['slippage']);report.update({'instrument':key,'mode':mode,'demo':mode=='demo'})
+                return self.send_json(report)
             parts=urllib.parse.urlparse(self.path).path.strip('/').split('/')
             if len(parts)>=2 and parts[0]=='api' and parts[1] in ('alerts','trades','forecasts'):
                 table=parts[1];identifier=parts[2] if len(parts)>2 else None
@@ -228,8 +252,13 @@ if __name__ == '__main__':
     parser.add_argument('--open-browser', action='store_true', help='Otwórz aplikację w przeglądarce po uruchomieniu.')
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
+    def bot_analysis(config):
+        key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']];bars,fetched=fetch_bars(key,tf)
+        return package(key,bars,'live',config['capital'],config['risk'],config['costs'],fetched,tf,preset['tools'],preset['strategy'],config['slippage'])
+    bot_service=paper_bot.Service(lambda key:get_quotes([key])['quotes'][0],bot_analysis)
+    bot_service.start()
     url = f'http://{args.host}:{args.port}'
-    print(f'Inwestapp v1.4: {url}', flush=True)
+    print(f'Inwestapp v1.5: {url}', flush=True)
     if args.open_browser:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
     try:
@@ -237,4 +266,5 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print('\nSerwer zatrzymany.', flush=True)
     finally:
+        bot_service.stop()
         server.server_close()

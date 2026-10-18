@@ -76,6 +76,21 @@ class HttpTests(unittest.TestCase):
         example={'items':[],'sources':[],'notice':'test'}
         with patch('server.get_news',return_value=example):self.assertEqual(self.request('/api/news?instrument=XRP'),(200,example))
 
+    def test_paper_bot_api_never_accepts_real_mode(self):
+        self.assertEqual(self.request('/api/bot/start',{'mode':'live'})[0],400)
+        status,r=self.request('/api/bot/start',{'instrument':'ETH','mode':'paper'})
+        self.assertEqual(status,200);self.assertEqual(r['mode'],'paper');self.assertTrue(r['state']['active'])
+        self.assertFalse(self.request('/api/bot/stop',{})[1]['state']['active'])
+
+    def test_lab_demo_and_missing_live_data_are_distinct(self):
+        status,r=self.request('/api/strategies/test',{'mode':'demo','instrument':'BTC','timeframe':'1h'})
+        self.assertEqual(status,200);self.assertTrue(r['demo']);self.assertEqual(len(r['rows']),5)
+        with patch('server.fetch_bars',side_effect=OSError()):self.assertEqual(self.request('/api/strategies/test',{'mode':'live'})[0],502)
+
+    def test_mcp_status_has_no_secret_or_fake_connection(self):
+        with patch('server.trader_mcp.status',return_value={'configured':True,'connected':False,'error':'blocked','tools':[]}):
+            status,r=self.request('/api/mcp/status');self.assertEqual(status,200);self.assertFalse(r['connected']);self.assertNotIn('key',r)
+
     def test_all_demo_routes(self):
         for key in ('XRP','XLM','BTC','ETH','SILVER','OIL','GOLD'):
             status,result=self.request('/api/analyze?mode=demo&instrument='+key)
