@@ -17,7 +17,7 @@ def analysis(action='BUY',candle='2026-10-18T09:00:00+00:00',passed=True,**extra
 class PaperBotTests(unittest.TestCase):
     def setUp(self):
         self.dir=tempfile.TemporaryDirectory();self.env=patch.dict(os.environ,{'INWESTAPP_DATA_DIR':self.dir.name});self.env.start()
-        self.now=time.time();self.config={'instrument':'XRP','capital':10000,'costs':10,'slippage':5,'risk':1,'daily_loss':10};bot.start(self.config);self.run=bot.current_state()['run_id']
+        self.now=time.time();self.config={'instrument':'XRP','capital':10000,'costs':10,'slippage':5,'risk':1,'daily_loss':10,'engine':'classic'};bot.start(self.config);self.run=bot.current_state()['run_id']
     def tearDown(self):self.env.stop();self.dir.cleanup()
     def buy(self):
         bot.advance(self.run,quote(stamp=self.now),analysis(),now=self.now)
@@ -90,7 +90,7 @@ class PaperBotTests(unittest.TestCase):
         with self.assertRaises(ValueError):bot.start({**self.config,'instrument':'BTC'})
 
     def test_worker_analysis_failure_preserves_risk_monitor(self):
-        self.buy();service=bot.Service(lambda _:quote(value=95),lambda _:(_ for _ in ()).throw(OSError()))
+        self.buy();service=bot.Service(lambda key,source:quote(value=95),lambda _:(_ for _ in ()).throw(OSError()))
         service.pulse();self.assertIsNone(bot.current_state()['position']);self.assertIn('analizy',bot.current_state()['status'])
 
     def test_stale_cycle_after_configuration_change_is_ignored(self):

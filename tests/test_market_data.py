@@ -66,7 +66,7 @@ class QuoteTests(unittest.TestCase):
     def test_failure_retains_only_explicitly_stale_last_price(self):
         with patch('market_data.read_json',return_value=self.ticker):
             first=market.get_quote('XRP')
-        market._CACHE['XRP']['savedAt']-=11
+        market._CACHE[('XRP','reference')]['savedAt']-=11
         with patch('market_data.read_json',side_effect=OSError('offline')):
             second=market.get_quote('XRP')
             cached=market.get_quote('XRP')

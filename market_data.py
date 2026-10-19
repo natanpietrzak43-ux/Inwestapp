@@ -5,6 +5,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import okx_data
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -19,7 +20,7 @@ INSTRUMENTS = {
     'GOLD': {'name': 'Złoto', 'symbol': 'GC=F', 'kind': 'commodity', 'description': 'Gold futures · cena referencyjna'},
 }
 _CACHE = {}
-_LOCKS = {key: threading.Lock() for key in INSTRUMENTS}
+_LOCKS = {(key,source): threading.Lock() for key in INSTRUMENTS for source in ('reference','okx')}
 
 
 def read_json(url):
@@ -79,27 +80,30 @@ def quote_freshness(quote, key):
             'ageSeconds': round(age), 'stale': stale}
 
 
-def get_quote(key):
+def get_quote(key,source='reference'):
+    if source not in ('reference','okx'):raise ValueError('Nieprawidłowe źródło notowań.')
+    actual='okx' if source=='okx' and INSTRUMENTS[key]['kind']=='crypto' else 'reference'
+    cache_key=(key,actual)
     # Per-instrument lock prevents duplicate upstream requests from overlapping browser polls.
-    with _LOCKS[key]:
-        cached = _CACHE.get(key)
+    with _LOCKS[cache_key]:
+        cached = _CACHE.get(cache_key)
         if cached and time.monotonic() - cached['savedAt'] < QUOTE_CACHE_SECONDS:
             result = cached['result']
         else:
             last = cached['result'].get('lastQuote') if cached and cached['result']['status'] == 'error' else (cached['result'] if cached else None)
             try:
-                quote = fetch_coinbase(key) if INSTRUMENTS[key]['kind'] == 'crypto' else fetch_yahoo_quote(key)
+                quote = okx_data.ticker(key) if actual=='okx' else fetch_coinbase(key) if INSTRUMENTS[key]['kind'] == 'crypto' else fetch_yahoo_quote(key)
                 if quote['timestamp'] <= 0 or quote['timestamp'] > time.time() + 60:
                     raise ValueError('Nieprawidłowy czas notowania.')
                 if quote['bid'] is not None and quote['ask'] < quote['bid']:
                     raise ValueError('Nieprawidłowy spread.')
-                result = {**quote, 'instrument': key, 'name': INSTRUMENTS[key]['name'], 'currency': 'USD',
+                result = {'currency':'USD', **quote, 'source':actual,'instrument': key, 'name': INSTRUMENTS[key]['name'],
                           'status': 'ok', 'receivedAt': datetime.now(timezone.utc).isoformat()}
             except Exception:
-                provider = 'Coinbase Exchange' if INSTRUMENTS[key]['kind'] == 'crypto' else 'Yahoo Finance'
+                provider = 'OKX' if actual=='okx' else 'Coinbase Exchange' if INSTRUMENTS[key]['kind'] == 'crypto' else 'Yahoo Finance'
                 result = {'instrument': key, 'name': INSTRUMENTS[key]['name'], 'status': 'error', 'lastQuote': last,
                           'error': f'Brak połączenia lub prawidłowych danych z {provider}. Spróbuj ponownie później.'}
-            _CACHE[key] = {'savedAt': time.monotonic(), 'result': result}
+            _CACHE[cache_key] = {'savedAt': time.monotonic(), 'result': result}
     if result['status'] == 'ok':
         return quote_freshness(result, key)
     if result['lastQuote']:
@@ -107,8 +111,8 @@ def get_quote(key):
     return result
 
 
-def get_quotes(keys=None):
+def get_quotes(keys=None,source='reference'):
     keys = list(INSTRUMENTS) if keys is None else keys
     with ThreadPoolExecutor(max_workers=min(8,max(1,len(keys)))) as pool:
-        quotes = list(pool.map(get_quote, keys))
+        quotes = list(pool.map(lambda key:get_quote(key,source), keys))
     return {'quotes': quotes, 'fetchedAt': datetime.now(timezone.utc).isoformat(), 'cacheSeconds': QUOTE_CACHE_SECONDS}

@@ -8,6 +8,7 @@ import sqlite3
 import paper_bot
 import trader_mcp
 import strategy_lab
+import okx_data
 import user_data
 from news_data import get_news
 import math
@@ -48,7 +49,9 @@ def demo_bars(key, timeframe='1d'):
     return bars
 
 
-def fetch_bars(key, timeframe='1h'):
+def fetch_bars(key, timeframe='1h',source='reference'):
+    if source=='okx':return okx_data.candles(key,timeframe)
+    if source!='reference':raise ValueError('Nieprawidłowe źródło historii.')
     spec=TIMEFRAMES[timeframe]
     cache_key=(key,timeframe)
     with LOCK:
@@ -77,7 +80,7 @@ def fetch_bars(key, timeframe='1h'):
     return bars, fetched
 
 
-def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d', tools=None, strategy='trend', slippage=0):
+def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d', tools=None, strategy='trend', slippage=0,source='reference'):
     result = analyze(bars, capital, risk, costs,timeframe,tools,strategy,slippage)
     age_seconds=max(0,(datetime.now(timezone.utc)-candle_time(bars[-1]['date'],timeframe)).total_seconds())
     age=age_seconds/86400
@@ -85,6 +88,9 @@ def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d',
     stale = age_seconds>threshold
     result.update({'instrument': {'id': key, **INSTRUMENTS[key]}, 'mode': mode, 'fetchedAt': fetched,
                    'lastDate': bars[-1]['date'], 'stale': stale, 'ageDays': age,'ageSeconds':round(age_seconds), 'history':{'first':bars[0]['date'],'last':bars[-1]['date'],'availableDays':round((candle_time(bars[-1]['date'],timeframe)-candle_time(bars[0]['date'],timeframe)).total_seconds()/86400,1),'providerLimitDays':TIMEFRAMES[timeframe]['limitDays'] if mode=='live' else None,'aggregated':bool(TIMEFRAMES[timeframe].get('aggregate'))}})
+    result.update({'source':source,'provider':'OKX' if source=='okx' else 'Yahoo Finance' if mode=='live' else 'CSV' if mode=='csv' else 'Demonstracja',
+                   'currency':'USDT' if source=='okx' else 'USD'})
+    if source=='okx':result['history'].update(providerLimitDays=min(okx_data.MAX_BARS,max(400,int(180*86400/TIMEFRAMES[timeframe]['seconds'])))*TIMEFRAMES[timeframe]['seconds']/86400,aggregated=False)
     if mode == 'demo' or stale:
         result['decision']['modelAction'] = result['decision']['action']
         result['decision']['action'] = 'WAIT'
@@ -118,26 +124,37 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'version': '1.5.0', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': '1.6.0', 'instruments': list(INSTRUMENTS)})
         if parsed.path=='/api/catalog':
-            return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES})
+            return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False}})
         if parsed.path == '/api/quotes':
             query = urllib.parse.parse_qs(parsed.query,keep_blank_values=True)
             key = query.get('instrument', [None])[0]
             if key is not None and key not in INSTRUMENTS:
                 return self.send_json({'error': 'Nieprawidłowy instrument.'}, 400)
-            snapshot=get_quotes([key] if key else None)
-            try:snapshot['alertEvents']=user_data.evaluate_alerts(snapshot['quotes'])
+            source=query.get('source',['reference'])[0]
+            if source not in ('reference','okx'):return self.send_json({'error':'Nieprawidłowe źródło notowań.'},400)
+            snapshot=get_quotes([key] if key else None,source=source) if source=='okx' else get_quotes([key] if key else None)
+            try:
+                # Existing user alerts are USD-denominated; never compare them to USDT.
+                alert_quotes=snapshot['quotes']
+                if source=='okx':
+                    active={a['instrument'] for a in user_data.list_alerts()['alerts'] if a['enabled'] and INSTRUMENTS[a['instrument']]['kind']=='crypto' and (not key or a['instrument']==key)}
+                    alert_quotes=[q for q in snapshot['quotes'] if q.get('currency')=='USD']
+                    if active:alert_quotes+=get_quotes(sorted(active))['quotes']
+                snapshot['alertEvents']=user_data.evaluate_alerts(alert_quotes)
             except (sqlite3.Error,OSError):snapshot['monitorError']='Nie udało się zapisać alertu w bazie. Sprawdź dostęp do folderu danych.'
             return self.send_json(snapshot)
         if parsed.path == '/api/analyze':
             query = urllib.parse.parse_qs(parsed.query,keep_blank_values=True)
             key = query.get('instrument', ['XRP'])[0]
             mode = query.get('mode', ['live'])[0]
-            if key not in INSTRUMENTS or mode not in ('live', 'demo'):
+            if key not in INSTRUMENTS or mode not in ('live', 'demo','okx'):
                 return self.send_json({'error': 'Nieprawidłowy instrument lub tryb.'}, 400)
             try:
                 timeframe=query.get('timeframe',['1h'])[0]
+                source='okx' if mode=='okx' else 'reference'
+                if source=='okx':okx_data.symbol(key)
                 strategy=query.get('strategy',['trend'])[0]
                 if timeframe not in TIMEFRAMES:raise ValueError('Nieprawidłowy interwał.')
                 tools=selection(query['tools'][0].split(',') if query.get('tools') and query['tools'][0] else ([] if 'tools' in query else None),strategy)
@@ -146,10 +163,10 @@ class Handler(BaseHTTPRequestHandler):
                     bars, fetched = demo_bars(key,timeframe), None
                 else:
                     try:
-                        bars, fetched = fetch_bars(key,timeframe)
+                        bars, fetched = fetch_bars(key,timeframe,source) if source=='okx' else fetch_bars(key,timeframe)
                     except Exception:
-                        return self.send_json({'error': 'Nie udało się pobrać notowań z Yahoo Finance. Sprawdź dostęp do query1.finance.yahoo.com, spróbuj później albo zaimportuj CSV. Nie podstawiono danych demonstracyjnych.'}, 502)
-                return self.send_json(package(key, bars, mode, *args, fetched=fetched,timeframe=timeframe,tools=tools,strategy=strategy))
+                        return self.send_json({'error': 'Nie udało się pobrać historii z '+('OKX (www.okx.com)' if source=='okx' else 'Yahoo Finance')+'. Sprawdź połączenie i uprawnienia sieci. Nie podstawiono danych demonstracyjnych ani innego źródła.'}, 502)
+                return self.send_json(package(key, bars, 'live' if mode=='okx' else mode, *args, fetched=fetched,timeframe=timeframe,tools=tools,strategy=strategy,source=source))
             except (ValueError, KeyError, TypeError, IndexError) as exc:
                 return self.send_json({'error': str(exc)}, 400)
         if parsed.path in ('/api/bot','/api/mcp/status','/api/strategies/research'):
@@ -201,19 +218,20 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<length<=9_000_000:raise ValueError('Żądanie może mieć maksymalnie 9 MB.')
             body=json.loads(self.rfile.read(length))
             if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
-            if method=='POST' and self.path in ('/api/bot/start','/api/bot/stop','/api/bot/close','/api/strategies/test','/api/mcp/research'):
+            if method=='POST' and self.path in ('/api/bot/start','/api/bot/account','/api/bot/stop','/api/bot/close','/api/strategies/test','/api/mcp/research'):
                 if self.path=='/api/bot/start':return self.send_json(paper_bot.start(body))
+                if self.path=='/api/bot/account':return self.send_json(paper_bot.start(body,new_account=True))
                 if self.path=='/api/bot/stop':return self.send_json(paper_bot.stop())
                 if self.path=='/api/bot/close':return self.send_json(paper_bot.close_position())
                 if self.path=='/api/mcp/research':return self.send_json(paper_bot.save_research(trader_mcp.fetch_research(body.get('tool'),body.get('arguments'))))
-                config=paper_bot.configuration(body);key=config['instrument'];tf=config['timeframe'];mode=body.get('mode','live')
+                mode=body.get('mode','live');config=paper_bot.configuration(body if mode=='live' else {**body,'source':'reference'});key=config['instrument'];tf=config['timeframe']
                 if mode=='live':
-                    try:bars,_=fetch_bars(key,tf)
+                    try:bars,_=fetch_bars(key,tf,config['source']) if config['source']=='okx' else fetch_bars(key,tf)
                     except Exception:return self.send_json({'error':'Brak historii od dostawcy; nie podstawiono demonstracji.'},502)
                 elif mode=='demo':bars=demo_bars(key,tf)
                 elif mode=='csv' and isinstance(body.get('csv'),str):bars=list(csv.DictReader(io.StringIO(body['csv'].lstrip('\ufeff'))))
                 else:raise ValueError('Wybierz live, demo lub wcześniej importowany CSV.')
-                report=strategy_lab.compare(bars,tf,config['capital'],config['risk'],config['costs'],config['slippage']);report.update({'instrument':key,'mode':mode,'demo':mode=='demo'})
+                report=strategy_lab.compare(bars,tf,config['capital'],config['risk'],config['costs'],config['slippage']);report.update({'instrument':key,'mode':mode,'demo':mode=='demo','source':config['source'] if mode=='live' else mode,'currency':config['currency'] if mode=='live' else 'USD'})
                 return self.send_json(report)
             parts=urllib.parse.urlparse(self.path).path.strip('/').split('/')
             if len(parts)>=2 and parts[0]=='api' and parts[1] in ('alerts','trades','forecasts'):
@@ -253,12 +271,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     def bot_analysis(config):
-        key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']];bars,fetched=fetch_bars(key,tf)
-        return package(key,bars,'live',config['capital'],config['risk'],config['costs'],fetched,tf,preset['tools'],preset['strategy'],config['slippage'])
-    bot_service=paper_bot.Service(lambda key:get_quotes([key])['quotes'][0],bot_analysis)
+        key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']];bars,fetched=fetch_bars(key,tf,config['source'])
+        return package(key,bars,'live',config['capital'],config['risk'],config['costs'],fetched,tf,preset['tools'],preset['strategy'],config['slippage'],source=config['source'])
+    bot_service=paper_bot.Service(lambda key,source:get_quotes([key],source=source)['quotes'][0],bot_analysis)
     bot_service.start()
     url = f'http://{args.host}:{args.port}'
-    print(f'Inwestapp v1.5: {url}', flush=True)
+    print(f'Inwestapp v1.6: {url}', flush=True)
     if args.open_browser:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
     try:

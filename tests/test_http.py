@@ -128,6 +128,25 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request('/api/analyze?mode=demo&risk=9')[0],400)
         self.assertEqual(self.request('/api/analyze?mode=demo&capital=nan')[0],400)
 
+    def test_okx_analysis_routes_preserve_currency_and_fail_explicitly(self):
+        with patch('server.fetch_bars',return_value=(demo_bars('BTC','1h'),'fixture')) as provider:
+            status,result=self.request('/api/analyze?mode=okx&instrument=BTC')
+            self.assertEqual(status,200);self.assertEqual(result['currency'],'USDT');self.assertEqual(result['provider'],'OKX')
+            provider.assert_called_once_with('BTC','1h','okx')
+        self.assertEqual(self.request('/api/analyze?mode=okx&instrument=GOLD')[0],400)
+        with patch('server.fetch_bars',side_effect=OSError()):
+            status,result=self.request('/api/analyze?mode=okx');self.assertEqual(status,502);self.assertNotIn('bars',result)
+        self.assertEqual(self.request('/api/quotes?source=unknown')[0],400)
+
+    def test_usdt_quotes_cannot_trigger_existing_usd_alerts(self):
+        self.request('/api/alerts',{'instrument':'BTC','direction':'above','price':50})
+        usdt={'instrument':'BTC','currency':'USDT','price':100,'status':'ok'}
+        usd={'instrument':'BTC','currency':'USD','price':40,'status':'ok'}
+        with patch('server.get_quotes',side_effect=[{'quotes':[usdt]},{'quotes':[usd]}]) as source:
+            status,result=self.request('/api/quotes?source=okx&instrument=BTC')
+        self.assertEqual(status,200);self.assertEqual(result['alertEvents'],[])
+        self.assertEqual(source.call_args_list[1].args[0],['BTC'])
+
     def test_quote_route_and_invalid_instrument(self):
         example = {'quotes': [{'instrument':'XRP','status':'error','lastQuote':None,'error':'source failure'}], 'cacheSeconds':10}
         with patch('server.get_quotes',return_value=example) as source:
