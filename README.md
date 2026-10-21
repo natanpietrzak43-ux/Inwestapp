@@ -1,6 +1,22 @@
-# Inwestapp 1.6
+# Inwestapp 1.7
 
 Prywatny warsztat analizy technicznej XRP, XLM, BTC/USD, ETH/USD, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, pięć gotowych zestawów, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji, licznik wpisanych prognoz oraz bot papierowy i laboratorium strategii. Brak rzeczywistych zleceń i połączenia z brokerem.
+
+## Aktualizacja 1.7 — interaktywny wykres i wyjaśnienia wskaźników
+
+W **Przeglądzie rynku** wykres ma krzyżyk kursora z ceną na osi pionowej i datą/czasem wskazanej świecy. Podgląd pokazuje osobno cenę w miejscu kursora oraz OHLC (otwarcie, maksimum, minimum, zamknięcie), wolumen i wybrane odczyty wskaźników tej świecy. Wyższa precyzja prezentacji nie zwiększa dokładności dostawcy: cena kursora to pozycja na skali, nie potwierdzona transakcja po tej cenie. Czas świec śróddziennych wyświetlamy w **Europe/Warsaw**, z oznaczeniem GMT+1/+2 rozróżniającym zmianę czasu. D1 ma tylko datę źródła; nie dopisujemy mu pozornej godziny otwarcia giełdy.
+
+- **Kółko myszy** przybliża i oddala wokół wskazanego miejsca. Przyciski **＋/−** robią to samo wokół środka. Skala ceny dopasowuje się do widocznych świec i wybranych linii.
+- **Przesuń**: przeciągnij w poziomie, aby oglądać starszą historię. **Najnowsze** wraca do końca danych, **Reset widoku** i dwuklik w trybie przesuwania przywracają wybrany zakres dni. Na ekranie dotykowym można przesuwać jednym palcem i przybliżać/oddalać dwoma.
+- **Punkt**, **Poziom ceny**, **Linia**: wybierz narzędzie i kliknij wykres; linia wymaga dwóch końców. Dwa ostatnie punkty pokazują zmianę ceny, procent oraz odstęp czasu. **Escape** anuluje rozpoczętą linię i włącza przesuwanie. **Cofnij oznaczenie** działa również po usunięciu wszystkich oznaczeń.
+- Lista **Punkty i linie odniesienia** pozwala pokazać lub usunąć pojedyncze oznaczenie. Maksymalnie 50. Zapis w pamięci tej przeglądarki, osobno według instrumentu, dostawcy, waluty, trybu i interwału; CSV ma dodatkowe rozróżnienie zestawu danych. Odświeżenie strony lub aktualizacja ZIP-em zachowuje oznaczenia przy tej samej przeglądarce i adresie/porcie. Nie są kopiowane do SQLite/eksportu dziennika ani między komputerami. Wyczyszczenie pamięci przeglądarki je usuwa.
+- Po ustawieniu fokusu na wykresie: **←/→** przechodzi po świecach, **↑/↓** zmienia poziom ceny kursora, **＋/−** zmienia zoom, **Home** przechodzi do najnowszych danych. W trybie oznaczeń **Enter/spacja** dodaje punkt w miejscu kursora. Narzędzia i wyjaśnienia są dostępne z klawiatury.
+
+Widoczne oscylatory korzystają z tego samego wycinka historii co wykres ceny. Zoom, przesuwanie i oznaczenia nie wysyłają zleceń ani nie zmieniają obliczeń wskaźników, sygnału, backtestu lub bota: te nadal wykorzystują pełną pobraną historię. Nie dodajemy syntetycznych świec ani notowań pomiędzy odczytami dostawcy. To lokalny wykres SVG z funkcjami nawigacji i adnotacji, bez zależności od konta/serwisu TradingView.
+
+Przycisk **?** przy każdym z 14 narzędzi, przy legendzie, wykresach oscylatorów i odczytach oraz przy ATR otwiera wyjaśnienie: **za co odpowiada**, **jak czytać**, **jak działa w Inwestapp**, **na co uważać**. Wyjaśnienia opisują faktyczne okresy i progi aplikacji. Kliknięcie nie zmienia zaznaczenia wskaźnika ani nie pobiera nowej analizy. Okno można zamknąć przyciskiem, klawiszem Escape lub kliknięciem poza nim.
+
+Weryfikacja: 145 testów Python/HTTP; `node --test tests/test_chart.cjs` — 14 testów modelu widoku i poprawności oznaczeń. Opcjonalny `tests/chart_browser.cjs` (Playwright/Chromium, osobny serwer z tymczasowym INWESTAPP_DATA_DIR) sprawdza odczyt kursora, skalowanie współrzędnych, zoom/pan, zapis i odseparowanie oznaczeń, cofanie, wszystkie 14 wyjaśnień, D1, klawiaturę, widok mobilny i gest dwoma palcami. Aplikacja nadal nie wymaga dodatkowych pakietów do uruchomienia.
 
 ## Aktualizacja 1.6 — OKX i zespół agentów
 

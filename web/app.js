@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 const INSTRUMENTS = [{id:'XRP',name:'XRP',sub:'XRP / USD',icon:'×',class:'xrp',kind:'crypto'}, {id:'XLM',name:'Stellar',sub:'XLM / USD',icon:'S',class:'xlm',kind:'crypto'}, {id:'BTC',name:'Bitcoin',sub:'BTC / USD',icon:'₿',class:'btc',kind:'crypto'}, {id:'ETH',name:'Ethereum',sub:'ETH / USD',icon:'Ξ',class:'eth',kind:'crypto'}, {id:'SILVER',name:'Srebro',sub:'Silver futures',icon:'Ag',class:'silver'}, {id:'OIL',name:'Ropa WTI',sub:'WTI futures',icon:'◈',class:'oil'}, {id:'GOLD',name:'Złoto',sub:'Gold futures',icon:'Au',class:'gold'}];
 let selected='XRP', data=null, range=7, tab='analysis', importCsv=null, requestId=0, catalog=null;
+const marketChart=new MarketChart({container:$('price-chart'),redraw:()=>{if(data)drawPrice();}});
 const fmt=(v,n=2)=>Number.isFinite(v)?v.toLocaleString('pl-PL',{minimumFractionDigits:n,maximumFractionDigits:n}):'—';
 const price=v=>fmt(v,v>0&&v<.0001?9:v<1?4:v<10?3:2);
 const quotePrice=(v,id)=>fmt(v,v>0&&v<.0001?9:id==='XRP'?4:id==='XLM'?6:2);
@@ -27,7 +28,7 @@ function setTab(next){
  if(window.workspaceTabChanged)window.workspaceTabChanged(next);
 }
 document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
-document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{range=Number(b.dataset.range);document.querySelectorAll('[data-range]').forEach(x=>x.classList.toggle('selected',x===b));if(data)drawPrice();});
+document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{range=Number(b.dataset.range);document.querySelectorAll('[data-range]').forEach(x=>x.classList.toggle('selected',x===b));if(data)marketChart.range(range);});
 $('refresh').onclick=()=>load();
 $('mode').onchange=()=>{importCsv=null;load();};
 for(const key of ['capital','risk','costs'])$(key).onchange=()=>load();
@@ -48,6 +49,7 @@ async function load(){
 }
 function analysisMoney(value){return price(value)+' '+(data?.currency||'USD');}
 function render(){
+ marketChart.setData(data,range,catalog.timeframes[data.timeframe].seconds);
  const bars=data.bars,last=bars.at(-1),prev=bars.at(-2),ind=data.indicators.at(-1),d=data.decision,bt=data.backtest;
  text('history-gate',data.historyGuard.passed?'Test spełnia minimalne kryteria blokady wejścia. Nie potwierdza trwałej przewagi ani przyszłego zysku.':'Nowe wejścia kupna są blokowane: '+data.historyGuard.reasons.join('; ')+'. Sygnały wyjścia nadal działają.');$('history-gate').className=data.historyGuard.passed?'notice':'notice warning';
  $('notice').className='notice'+(data.mode==='demo'||data.stale?' warning':'');
@@ -60,7 +62,7 @@ function render(){
  text('decision-summary',`${labels[d.action].toUpperCase()} · ${d.action==='SELL'?'Sygnał zamknięcia posiadanej pozycji kupna. To nie otwarcie shorta.':d.action==='BUY'?'Grupy potwierdzają wejście; sprawdź wielkość pozycji i koszty u brokera.':'Poczekaj na zgodne warunki. Nie otwieraj pozycji tylko dlatego, że cena się porusza.'} ${d.reason}`);
  text('signal',labels[d.action]);text('reason',d.reason);$('signal-icon').innerHTML=`<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="${{BUY:'M5 17 17 5M7 5h10v10',SELL:'M5 5 17 17M7 17h10V7',WAIT:'M8 5v14M16 5v14'}[d.action]}" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`;$('signal-icon').className='signal-icon '+d.action.toLowerCase();text('score',`${d.score} / ${d.total}`);$('score-bars').innerHTML=Array.from({length:d.total},(_,i)=>`<i class="${i<d.score?'filled':''}"></i>`).join('');text('demo-model',d.technicalAction!==d.action?`Układ techniczny: ${labels[d.technicalAction]} · decyzja po blokadach: ${labels[d.action]}`:d.modelAction?`Model na tych danych: ${labels[d.modelAction]} · sygnał zablokowany`: '');
  $('group-checks').replaceChildren(...d.groups.map(c=>{const row=document.createElement('div');row.textContent=(c.ok?'✓ ':'– ')+c.name;row.className=c.ok?'positive':'muted';row.title=c.detail;return row;}));text('selected-count',`${data.selectedTools.length} wybranych narzędzi`);
- $('checks').replaceChildren(...d.checks.map(c=>{const row=document.createElement('div');row.className='check'+(c.ok?' pass':'');const mark=document.createElement('span');mark.textContent=c.ok?'✓':c.state==='bear'?'↓':'–';const inner=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('small');name.textContent=c.name;detail.textContent=`${{bull:'Potwierdzenie',bear:'Spadek / wyjście',neutral:'Neutralnie',missing:'Brak danych'}[c.state]} · ${fmt(c.value,c.id==='obv'?0:3)}. ${c.detail}`;inner.append(name,detail);row.append(mark,inner);return row;}));
+ $('checks').replaceChildren(...d.checks.map(c=>{const row=document.createElement('div');row.className='check'+(c.ok?' pass':'');const mark=document.createElement('span');mark.textContent=c.ok?'✓':c.state==='bear'?'↓':'–';const inner=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('small');name.textContent=c.name;detail.textContent=`${{bull:'Potwierdzenie',bear:'Spadek / wyjście',neutral:'Neutralnie',missing:'Brak danych'}[c.state]} · ${fmt(c.value,c.id==='obv'?0:3)}. ${c.detail}`;name.append(' ',ToolEducation.button(c.id,c.name));inner.append(name,detail);row.append(mark,inner);return row;}));
  const plan=data.plan;const commodity=data.instrument.kind==='commodity';text('plan-note',commodity?'Surowce: tylko poziomy cenowe. Wielkość zlecenia wymaga mnożnika i warunków brokera.':d.action==='BUY'?'Orientacyjne poziomy dla nowego wejścia.':'Scenariusz poglądowy. Obecny wniosek nie zaleca nowego wejścia.');
  const rows=[['Cena odniesienia',analysisMoney(plan.entry)],['Stop loss · 2 × ATR',analysisMoney(plan.stop)],['Take profit · 3 × ATR',analysisMoney(plan.target)],['Zysk / ryzyko przed kosztami','1,5 : 1'],['Budżet ryzyka',analysisMoney(plan.riskBudget)]];
  if(!commodity)rows.push(['Maks. liczba jednostek',fmt(plan.units,4)],['Wartość pozycji',analysisMoney(plan.notional)]);
@@ -75,33 +77,30 @@ function render(){
  drawPrice();drawEquity();
 }
 function svgNode(name,attributes={},content){const el=document.createElementNS('http://www.w3.org/2000/svg',name);for(const[k,v]of Object.entries(attributes))el.setAttribute(k,v);if(content!==undefined)el.textContent=content;return el;}
-function chartBase(container,rows,values,bounds=null,ticks=5){
- const width=800,height=280,pad={l:7,r:77,t:17,b:27},plotW=width-pad.l-pad.r,plotH=height-pad.t-pad.b;
- let min=Math.min(...values),max=Math.max(...values),spread=max-min||Math.abs(max)*.01||1;min-=spread*.09;max+=spread*.09;if(bounds){min=bounds[0];max=bounds[1];}
- const x=i=>pad.l+i/(Math.max(1,rows.length-1))*plotW,y=v=>pad.t+(max-v)/(max-min)*plotH;
- const svg=svgNode('svg',{viewBox:`0 0 ${width} ${height}`,role:'img'});
- for(let i=0;i<5;i++){const value=min+(max-min)*i/4,yy=y(value);svg.append(svgNode('line',{x1:pad.l,y1:yy,x2:width-pad.r,y2:yy,stroke:'#edf1ee','stroke-dasharray':'3 4'}),svgNode('text',{x:width-pad.r+12,y:yy+4},price(value)));}
- for(let i=0;i<ticks;i++){const index=Math.round((rows.length-1)*i/(ticks-1));svg.append(svgNode('text',{x:x(index),y:height-5,'text-anchor':i===0?'start':i===ticks-1?'end':'middle'},displayDate(rows[index].date,false)));}
- container.replaceChildren(svg);return {svg,x,y,plotW};
+function chartBase(container,rows,values,bounds=null,ticks=5,interactive=false){
+ const width=interactive?Math.max(280,container.clientWidth||800):800,height=interactive?Math.max(240,container.clientHeight||400):280,pad=interactive?{l:10,r:110,t:20,b:40}:{l:7,r:77,t:17,b:27},plotW=width-pad.l-pad.r,plotH=height-pad.t-pad.b;
+ let min=Infinity,max=-Infinity;for(const v of values)if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v);}if(!Number.isFinite(min)){min=0;max=1;}const spread=max-min||Math.abs(max)*.01||1;min-=spread*.09;max+=spread*.09;if(interactive)min=Math.max(0,min);if(bounds){min=bounds[0];max=bounds[1];}
+ const x=i=>interactive?pad.l+(i+.5)/Math.max(1,rows.length)*plotW:pad.l+i/(Math.max(1,rows.length-1))*plotW,y=v=>pad.t+(max-v)/(max-min)*plotH;
+ const svg=svgNode('svg',{viewBox:`0 0 ${width} ${height}`,role:'img',...(interactive?{preserveAspectRatio:'none'}:{})});
+ for(let i=0;i<5;i++){const value=min+(max-min)*i/4,yy=y(value);svg.append(svgNode('line',{x1:pad.l,y1:yy,x2:width-pad.r,y2:yy,stroke:'#edf1ee','stroke-dasharray':'3 4'}),svgNode('text',{x:width-pad.r+10,y:yy+4},interactive?fmt(value,Math.max(2,Math.min(10,Math.ceil(-Math.log10((max-min)/4))+1))):price(value)));}
+ const tickCount=Math.min(ticks,rows.length);for(let i=0;i<tickCount;i++){const index=Math.round((rows.length-1)*i/Math.max(1,tickCount-1));svg.append(svgNode('text',{x:x(index),y:height-8,'text-anchor':i===0?'start':i===tickCount-1?'end':'middle'},displayDate(rows[index].date,false)));}
+ container.replaceChildren(svg);return {svg,x,y,plotW,plotH,width,height,pad,min,max};
 }
 function line(svg,rows,value,x,y,color,dashed=false){let path='',started=false;rows.forEach((r,i)=>{const v=value(r,i);if(v===null||v===undefined){started=false;return;}path+=`${started?'L':'M'}${x(i).toFixed(2)},${y(v).toFixed(2)} `;started=true;});const node=svgNode('path',{d:path,fill:'none',stroke:color,'stroke-width':'1.7',...(dashed?{'stroke-dasharray':'5 4'}:{})});svg.append(node);return node;}
 function displayDate(value,full=true){
  const date=new Date(value);if(!Number.isFinite(date.getTime()))return value;
  const hourly=value.includes('T');return date.toLocaleString('pl-PL',{timeZone:'Europe/Warsaw',day:'2-digit',month:'2-digit',...(full?{year:'numeric'}:{}),...(hourly?{hour:'2-digit',minute:'2-digit'}:{})});
 }
-function visibleRows(){
- const end=Date.parse(data.bars.at(-1).date)+catalog.timeframes[data.timeframe].seconds*1000,cutoff=end-range*86400000;
- let offset=data.bars.findIndex(b=>Date.parse(b.date)>=cutoff);if(offset<0)offset=data.bars.length-1;
- return{rows:data.bars.slice(offset),inds:data.indicators.slice(offset)};
-}
+function visibleRows(){const {start,end}=marketChart.view.slice();return {rows:data.bars.slice(start,end),inds:data.indicators.slice(start,end),offset:start};}
+
 function drawPrice(){
  const available=data.history.availableDays;const limited=available<range-catalog.timeframes[data.timeframe].seconds/86400-1;
  text('coverage-note',`Widok: ostatnie ${range} dni. Dostępna historia: ${displayDate(data.history.first)} → ${displayDate(data.history.last)} (${fmt(available,0)} dni).${limited?' Brakuje części żądanego zakresu; pokazujemy wyłącznie dostępne świece.':''}${data.source!=='okx'&&['15m','30m'].includes(data.timeframe)?' Yahoo zwykle ogranicza M15/M30 do 60 dni; dla 90/180 dni wybierz H1/H2/H4/D1 lub importuj CSV.':''}`);$('coverage-note').className=limited?'notice warning':'fine';
- const {rows,inds}=visibleRows(),chosen=new Set(data.selectedTools);
+ const {rows,inds,offset}=visibleRows(),chosen=new Set(data.selectedTools);
  const keys=[];if(chosen.has('ema'))keys.push('ema20','ema50','ema200');if(chosen.has('ema_mercado'))keys.push('emaM1','emaM2','emaM3');if(chosen.has('ichimoku'))keys.push('tenkan','kijun','cloudA','cloudB');if(chosen.has('alligator'))keys.push('alligatorJaw','alligatorTeeth','alligatorLips');if(chosen.has('bollinger'))keys.push('bbUpper','bbLower','bbMid');if(chosen.has('sar'))keys.push('sar');
  const fib=chosen.has('fibonacci')?inds.at(-1).fibonacci:null;
  const values=rows.flatMap((r,i)=>[r.low,r.high,...keys.map(k=>inds[i][k])].filter(Number.isFinite));if(fib)values.push(...Object.values(fib.levels));
- const {svg,x,y,plotW}=chartBase($('price-chart'),rows,values);svg.prepend(svgNode('title',{},`${data.instrument.name}, ${data.timeframe}, ${range} dni historii`));
+ const frame=chartBase($('price-chart'),rows,values,null,Math.max(2,Math.floor(($('price-chart').clientWidth||800)/150)),true),{svg,x,y,plotW}=frame;svg.prepend(svgNode('title',{},`${data.instrument.name}, ${data.timeframe}, interaktywny wykres świec`));const plotStart=svg.childNodes.length;
  const add=(key,color,tool,dashed=false)=>{const path=line(svg,inds,r=>r[key],x,y,color,dashed);path.setAttribute('data-tool',tool);path.setAttribute('data-indicator',key);return path;};
  function fillBand(upper,lower,color,tool){const points=inds.flatMap((r,i)=>Number.isFinite(r[upper])&&Number.isFinite(r[lower])?[i]:[]);if(points.length<2)return;const coordinates=points.map(i=>`${x(i)},${y(inds[i][upper])}`).concat(points.slice().reverse().map(i=>`${x(i)},${y(inds[i][lower])}`));svg.append(svgNode('polygon',{points:coordinates.join(' '),fill:color,'fill-opacity':.08,'data-tool':tool}));}
  if(chosen.has('bollinger'))fillBand('bbUpper','bbLower','#659dab','bollinger');
@@ -122,8 +121,8 @@ function drawPrice(){
  if(fib){const start=Math.max(0,rows.length-55);for(const[ratio,value]of Object.entries(fib.levels)){svg.append(svgNode('line',{x1:x(start),x2:x(rows.length-1),y1:y(value),y2:y(value),stroke:'#a89572','stroke-dasharray':'4 4','stroke-width':1,'data-tool':'fibonacci'}),svgNode('text',{x:x(start)+5,y:y(value)-4},fmt(Number(ratio)*100,1)+'%'));}text('fib-note',`Fibonacci: automatyczne ekstrema ostatnich 55 świec (${displayDate(fib.startDate)} → ${displayDate(fib.endDate)}). Kierunek: ${fib.direction==='up'?'wzrost':fib.direction==='down'?'spadek':'nieustalony'}. Poziomy są kontekstem.`);}
  $('fib-note').hidden=!fib;
  const colors={ema_mercado:'#21b354',ema:'#9473b8',ichimoku:'#63a985',alligator:'#748fae',sar:'#b38b58',bollinger:'#659dab',fibonacci:'#a89572'};
- $('chart-legend').replaceChildren(...Array.from(chosen).filter(t=>catalog.tools[t].overlay).flatMap(t=>{const entries=t==='ema_mercado'?[['M1 · EMA21','#21b354'],['M2 · EMA89','#ffffff'],['M3 · EMA200','#e34848']]:[[catalog.tools[t].name,colors[t]]];return entries.map(([name,color])=>{const span=document.createElement('span'),dot=document.createElement('i');dot.className='legend-dot';dot.style.background=color;if(color==='#ffffff')dot.style.border='1px solid #43534f';span.append(dot,document.createTextNode(name));return span;});}));
- text('chart-interval',`${rows.length} świec · ${range} dni · ${catalog.timeframes[data.timeframe].short}`);drawIndicatorCharts(rows,inds);
+ $('chart-legend').replaceChildren(...Array.from(chosen).filter(t=>catalog.tools[t].overlay).flatMap(t=>{const entries=t==='ema_mercado'?[['M1 · EMA21','#21b354'],['M2 · EMA89','#ffffff'],['M3 · EMA200','#e34848']]:[[catalog.tools[t].name,colors[t]]];return entries.map(([name,color])=>{const span=document.createElement('span'),dot=document.createElement('i');dot.className='legend-dot';dot.style.background=color;if(color==='#ffffff')dot.style.border='1px solid #43534f';span.append(dot,document.createTextNode(name),ToolEducation.button(t,catalog.tools[t].name));return span;});}));
+ text('chart-interval',`${rows.length} świec · ${catalog.timeframes[data.timeframe].short} · ${displayDate(rows[0].date)} → ${displayDate(rows.at(-1).date)}`);const plots=Array.from(svg.childNodes).slice(plotStart),defs=svgNode('defs'),clip=svgNode('clipPath',{id:'main-price-clip'});clip.append(svgNode('rect',{x:frame.pad.l,y:frame.pad.t,width:frame.plotW,height:frame.plotH}));defs.append(clip);const plot=svgNode('g',{'clip-path':'url(#main-price-clip)'});for(const child of plots)plot.append(child);svg.append(defs,plot);marketChart.attach(frame,rows,inds,offset);drawIndicatorCharts(rows,inds);
 }
 function drawBxtrender(area,rows,inds){
  const values=inds.flatMap(r=>[r.bxShort,r.bxLong,r.bxT3].filter(Number.isFinite));
@@ -148,7 +147,7 @@ function drawBxtrender(area,rows,inds){
 function drawIndicatorCharts(rows,inds){
  $('indicator-charts').replaceChildren();
  const specs={bxtrender:{keys:['bxShort','bxLong','bxT3'],bounds:[-55,55],levels:[0]},rsi:{keys:['rsi'],bounds:[0,100],levels:[30,70]},stochastic:{keys:['stochK','stochD'],bounds:[0,100],levels:[20,80]},adx:{keys:['adx'],bounds:[0,100],levels:[20]},momentum:{keys:['momentum'],levels:[100]},obv:{keys:['obv','obvEma']},macd:{keys:['macd','macdSignal','macdHist'],levels:[0]}};
- for(const tool of data.selectedTools){const spec=specs[tool];if(!spec)continue;const card=document.createElement('article');card.className='card indicator-card';card.dataset.tool=tool;const head=document.createElement('div');head.className='card-head';const title=document.createElement('h2');title.textContent=catalog.tools[tool].name;const value=document.createElement('span');value.className='muted';value.textContent=spec.keys.map(k=>fmt(inds.at(-1)[k],tool==='obv'?0:2)).join(' / ');head.append(title,value);const area=document.createElement('div');area.className='chart oscillator-chart';card.append(head,area);$('indicator-charts').append(card);if(tool==='bxtrender'){value.textContent=`Krótkie ${fmt(inds.at(-1).bxShort)} / Długie ${fmt(inds.at(-1).bxLong)}`;const note=document.createElement('p');note.className='fine';note.textContent='Wąskie słupki: krótkie momentum; szerokie, jasne: długi trend. Zielone powyżej 0, czerwone poniżej. Jaśniejszy odcień oznacza wzrost wartości. Niebieska linia i punkty to dodatkowe wygładzenie T3(5; 0,7); punkt pokazujemy dopiero na świecy potwierdzenia zwrotu. Sam punkt nie jest sygnałem kupna/sprzedaży.';card.append(note);drawBxtrender(area,rows,inds);continue;}const values=inds.flatMap(r=>spec.keys.map(k=>r[k]).filter(Number.isFinite));if(!values.length){area.textContent='Brak danych.';continue;}if(spec.levels)values.push(...spec.levels);const {svg,x,y}=chartBase(area,rows,values,spec.bounds||null,3);for(const level of spec.levels||[])svg.append(svgNode('line',{x1:x(0),x2:x(rows.length-1),y1:y(level),y2:y(level),stroke:'#b6c5bc','stroke-dasharray':'4 4'}));spec.keys.forEach((key,i)=>line(svg,inds,r=>r[key],x,y,['#198d74','#b18b60','#879cac'][i],i===1));}
+ for(const tool of data.selectedTools){const spec=specs[tool];if(!spec)continue;const card=document.createElement('article');card.className='card indicator-card';card.dataset.tool=tool;const head=document.createElement('div');head.className='card-head';const title=document.createElement('h2');title.textContent=catalog.tools[tool].name;title.append(' ',ToolEducation.button(tool,catalog.tools[tool].name));const value=document.createElement('span');value.className='muted';value.textContent=spec.keys.map(k=>fmt(inds.at(-1)[k],tool==='obv'?0:2)).join(' / ');head.append(title,value);const area=document.createElement('div');area.className='chart oscillator-chart';card.append(head,area);$('indicator-charts').append(card);if(tool==='bxtrender'){value.textContent=`Krótkie ${fmt(inds.at(-1).bxShort)} / Długie ${fmt(inds.at(-1).bxLong)}`;const note=document.createElement('p');note.className='fine';note.textContent='Wąskie słupki: krótkie momentum; szerokie, jasne: długi trend. Zielone powyżej 0, czerwone poniżej. Jaśniejszy odcień oznacza wzrost wartości. Niebieska linia i punkty to dodatkowe wygładzenie T3(5; 0,7); punkt pokazujemy dopiero na świecy potwierdzenia zwrotu. Sam punkt nie jest sygnałem kupna/sprzedaży.';card.append(note);drawBxtrender(area,rows,inds);continue;}const values=inds.flatMap(r=>spec.keys.map(k=>r[k]).filter(Number.isFinite));if(!values.length){area.textContent='Brak danych.';continue;}if(spec.levels)values.push(...spec.levels);const {svg,x,y}=chartBase(area,rows,values,spec.bounds||null,3);for(const level of spec.levels||[])svg.append(svgNode('line',{x1:x(0),x2:x(rows.length-1),y1:y(level),y2:y(level),stroke:'#b6c5bc','stroke-dasharray':'4 4'}));spec.keys.forEach((key,i)=>line(svg,inds,r=>r[key],x,y,['#198d74','#b18b60','#879cac'][i],i===1));}
 }
 
 function drawEquity(){const rows=data.backtest.equity;const {svg,x,y}=chartBase($('equity-chart'),rows,rows.flatMap(r=>[r.value,r.benchmark]));svg.prepend(svgNode('title',{},'Porównanie kapitału strategii i kup i trzymaj'));line(svg,rows,r=>r.benchmark,x,y,'#b0bcb5',true);line(svg,rows,r=>r.value,x,y,'#198d74');}
@@ -199,13 +198,13 @@ function choosePreset(name){const p=catalog.presets[name];if(!p)return;document.
 async function initialize(){
  createQuoteCards();renderInstruments();
  try{
-  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.6 z nowego folderu.');catalog=await response.json();
+  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.7 z nowego folderu.');catalog=await response.json();
   let saved={};try{const value=JSON.parse(localStorage.getItem('inwestapp.settings')||'{}');saved=value&&typeof value==='object'?value:{};}catch{}
   const chosen=Array.isArray(saved.tools)?saved.tools.filter(t=>catalog.tools[t]):catalog.presets.balanced.tools;
   if(['trend','range'].includes(saved.strategy))$('strategy').value=saved.strategy;if(catalog.timeframes[saved.timeframe])$('timeframe').value=saved.timeframe;
   if(Array.isArray(saved.tools))$('preset').value='custom';
   const names={trend:'Trend',momentum:'Momentum',volume:'Wolumen',regime:'Reżim',context:'Kontekst'};
-  $('tool-options').replaceChildren(...Object.entries(catalog.tools).map(([id,tool])=>{const label=document.createElement('label');label.className='tool-option';const input=document.createElement('input');input.type='checkbox';input.value=id;input.id='tool-'+id;input.checked=chosen.includes(id);const body=document.createElement('span'),title=document.createElement('strong'),group=document.createElement('small');title.textContent=tool.name;group.textContent=names[tool.group];body.append(title,group);label.append(input,body);label.title=tool.description;input.onchange=()=>{$('preset').value='custom';load();};return label;}));
+  $('tool-options').replaceChildren(...Object.entries(catalog.tools).map(([id,tool])=>{const wrap=document.createElement('div');wrap.className='tool-option';const label=document.createElement('label');label.className='tool-choice';const input=document.createElement('input');input.type='checkbox';input.value=id;input.id='tool-'+id;input.checked=chosen.includes(id);const body=document.createElement('span'),title=document.createElement('strong'),group=document.createElement('small');title.textContent=tool.name;group.textContent=names[tool.group];body.append(title,group);label.append(input,body);wrap.append(label,ToolEducation.button(id,tool.name));input.onchange=()=>{$('preset').value='custom';load();};return wrap;}));
   $('preset').onchange=()=>{if($('preset').value!=='custom')choosePreset($('preset').value);};$('reset-tools').onclick=()=>choosePreset('balanced');$('strategy').onchange=()=>{$('preset').value='custom';load();};$('timeframe').onchange=()=>{importCsv=null;load();};
   $('source-links').replaceChildren(...catalog.sources.map(s=>{const a=document.createElement('a');a.href=s.url;a.textContent=s.name;a.target='_blank';a.rel='noopener noreferrer';return a;}));load();
  }catch(err){$('loading').hidden=true;showError(err.message);startQuotePolling();}

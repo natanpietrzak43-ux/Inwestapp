@@ -124,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'version': '1.6.0', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': '1.7.0', 'instruments': list(INSTRUMENTS)})
         if parsed.path=='/api/catalog':
             return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False}})
         if parsed.path == '/api/quotes':
@@ -192,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(user_data.forecast_summary(key,horizon,quote))
             except (ValueError,TypeError,KeyError) as exc:return self.send_json({'error':str(exc)},400)
             except (sqlite3.Error,OSError):return self.send_json({'error':'Baza danych jest niedostępna.'},503)
-        paths = {'/bot.js':'bot.js','/workspace.js':'workspace.js', '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+        paths = {'/chart.js':'chart.js','/education.js':'education.js','/bot.js':'bot.js','/workspace.js':'workspace.js', '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
         if parsed.path not in paths:
             return self.send_json({'error': 'Nie znaleziono.'}, 404)
         file = ROOT / paths[parsed.path]
@@ -276,7 +276,7 @@ if __name__ == '__main__':
     bot_service=paper_bot.Service(lambda key,source:get_quotes([key],source=source)['quotes'][0],bot_analysis)
     bot_service.start()
     url = f'http://{args.host}:{args.port}'
-    print(f'Inwestapp v1.6: {url}', flush=True)
+    print(f'Inwestapp v1.7: {url}', flush=True)
     if args.open_browser:
         threading.Timer(1, lambda: webbrowser.open(url)).start()
     try:
