@@ -1,22 +1,32 @@
-# Inwestapp 1.7.1
+# Inwestapp 1.7.2
 
 Prywatny warsztat analizy technicznej XRP, XLM, BTC/USD, ETH/USD, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, pięć gotowych zestawów, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji, licznik wpisanych prognoz oraz bot papierowy i laboratorium strategii. Brak rzeczywistych zleceń i połączenia z brokerem.
 
-## Poprawka 1.7.1 — widoczność aktualizacji i wykrywanie starego serwera
+## Poprawka 1.7.2 — prawidłowe rozpoznawanie błędów portu w Windows
+
+Poprzedni launcher uznawał każdy błąd próbnego połączenia (również timeout) za zajęty port. W Windows mogło to blokować start mimo pustego wyniku `netstat`. Teraz sprawdzamy możliwość przypisania lokalnego portu przez `bind`, zamiast próbować połączenia. Zajęty adres, odmowa dostępu/rezerwacja systemowa i inne błędy mają osobne komunikaty wraz z oryginalnym błędem systemowym. Windows korzysta z wyłącznego dostępu do portu, aby uniknąć współdzielenia adresu przez dwa serwery.
+
+Rozpakuj **cały ZIP 1.7.2 do nowego folderu** i uruchom znajdujący się w nim `Uruchom.bat`. Nie kopiuj pojedynczych plików między wydaniami. Launcher nadal nie zatrzymuje cudzych procesów ani samoczynnie nie wybiera innego portu. Jeśli błąd się powtórzy, skopiuj cały komunikat, zwłaszcza `Szczegoly systemowe`. `WinError 10013` oznacza odmowę dostępu; sam nie dowodzi, że działa starszy serwer. Polecenie `netsh interface ipv4 show excludedportrange protocol=tcp` jedynie wyświetla rezerwacje Windows. Nie usuwaj ich w ciemno.
+
+Opcjonalny wybrany port: w folderze aplikacji otwórz CMD i wpisz `py -3 launch.py --port 8001` lub `Uruchom.bat --port 8001`. Nie uruchamiaj równolegle dwóch wersji na tej samej bazie bota. Zmiana portu zmienia adres aplikacji: oznaczenia wykresu i ustawienia zapisane w przeglądarce pozostają przypisane do poprzedniego adresu. Dane SQLite pozostają we wspólnym katalogu użytkownika.
+
+Weryfikacja 1.7.2: 162 testy Python/HTTP i 14 testów modelu wykresu zakończone powodzeniem; rzeczywisty start przez launcher, kontrolowane zamknięcie Ctrl+C ze zwolnieniem portu, odmowa startu drugiego serwera i test przeglądarki potwierdzający wersję oraz wczytanie funkcji. Testy regresyjne obejmują błędnie odrzucony wolny port przy timeout połączenia, rzeczywisty zajęty port, odmowę dostępu, rozpoznanie działającej aplikacji przy wyłącznym dostępie oraz konfigurację wyłączności Windows. Natywne uruchomienie na Windows wymaga potwierdzenia na komputerze użytkownika; testy chmurowe wykonano na Linux.
+
+## Widoczność aktualizacji i wykrywanie starego serwera
 
 Jeśli w prawym górnym rogu widzisz **1.6**, oglądasz starszy interfejs. Funkcje interaktywnego wykresu i „?” są od wersji 1.7. Samo pobranie ZIP-a nie przełącza działającego serwera na nowy folder.
 
 1. W terminalu starej aplikacji naciśnij **Ctrl+C**.
-2. Rozpakuj **cały ZIP 1.7.1** do nowego folderu. Wejdź do folderu, w którym jest `Uruchom.bat` i `server.py`.
+2. Rozpakuj **cały ZIP 1.7.2** do nowego folderu. Wejdź do folderu, w którym jest `Uruchom.bat` i `server.py`.
 3. Uruchom **Uruchom.bat z nowego folderu** i pozostaw jego okno otwarte.
-4. W przeglądarce naciśnij **Ctrl+F5**. U góry ma być **Interfejs 1.7.1 · serwer 1.7.1** i komunikat o wczytaniu wykresu oraz wyjaśnień.
+4. W przeglądarce naciśnij **Ctrl+F5**. U góry ma być **Interfejs 1.7.2 · serwer 1.7.2** i komunikat o wczytaniu wykresu oraz wyjaśnień.
 5. Kliknij **Otwórz nowy wykres** albo **Obejrzyj funkcje na danych demonstracyjnych**. Podgląd demonstracyjny jest wyraźnie oznaczony i pozwala sprawdzić funkcje, gdy dostawca notowań jest niedostępny. „?” znajdziesz przy narzędziach w sekcji **Twój zestaw analityczny**; pasek nawigacji i rysowania jest przy wykresie.
 
-Launcher `launch.py` sprawdza kompletność plików i zgodność wersji HTML. Jeśli na porcie działa starsza aplikacja, pokazuje jej wersję i instrukcję zatrzymania, kończy się kodem 3 i nie uruchamia drugiego bota ani nie otwiera starej strony. Nie zabija żadnych procesów i nie wybiera po cichu innego portu. Jeśli potwierdzi już działającą wersję 1.7.1 z wymaganymi funkcjami, otwiera istniejącą aplikację bez tworzenia drugiego serwera. `python launch.py --check-installation` sprawdza same pliki, bez uruchamiania bota.
+Launcher `launch.py` sprawdza kompletność plików i zgodność wersji HTML. Jeśli na porcie działa starsza aplikacja, pokazuje jej wersję i instrukcję zatrzymania, kończy się kodem 3 i nie uruchamia drugiego bota ani nie otwiera starej strony. Nie zabija żadnych procesów i nie wybiera po cichu innego portu. Jeśli potwierdzi już działającą wersję 1.7.2 z wymaganymi funkcjami, otwiera istniejącą aplikację bez tworzenia drugiego serwera. `python launch.py --check-installation` sprawdza same pliki, bez uruchamiania bota.
 
 Strona sprawdza wersję serwera i wczytanie modułów. Przy niezgodności lub błędzie ładowania pokazuje widoczny komunikat. Pliki interfejsu mają adresy z numerem wersji, a odpowiedzi lokalnego serwera nagłówek `Cache-Control: no-store`. Wersja jest wspólna w `app_release.py`; dostęp do danych, wskaźniki, oznaczenia wykresu i osobiste rekordy nie są resetowane. Bezpośrednie uruchomienie `python server.py` pozostaje obsługiwane; przy zajętym porcie również kończy się czytelnym komunikatem.
 
-Sprawdzone: 154 testy Python/HTTP, w tym rzeczywisty test launchera przy zajętym porcie ze starszym serwerem; 14 testów modelu wykresu; testy przeglądarkowe dla nowego wykresu, wersji 1.7.1, podglądu bez dostępu do notowań, niezgodności wersji i brakującego modułu. Składnia i działanie skryptów Python sprawdzone w chmurze Linux; samego pliku BAT nie uruchamiano na Windowsie.
+Wcześniejsza weryfikacja 1.7.1: 154 testy Python/HTTP, w tym rzeczywisty test launchera przy zajętym porcie ze starszym serwerem; 14 testów modelu wykresu; testy przeglądarkowe dla nowego wykresu, wersji 1.7.1, podglądu bez dostępu do notowań, niezgodności wersji i brakującego modułu. Składnia i działanie skryptów Python sprawdzone w chmurze Linux; samego pliku BAT nie uruchamiano na Windowsie.
 
 ## Aktualizacja 1.7 — interaktywny wykres i wyjaśnienia wskaźników
 
@@ -244,7 +254,7 @@ node --check web/bot.js
 node --check tools/trader_mcp_bridge.cjs
 ```
 
-`GET /api/health` → `version=1.7.1` i `features`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
+`GET /api/health` → `version=1.7.2` i `features`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
 
 Nowe API: `GET/POST /api/alerts`, `POST /api/alerts/{id}/rearm`, `DELETE /api/alerts/{id}`; `GET /api/journal`, `POST /api/trades`, `PUT/DELETE /api/trades/{id}`; `GET /api/news?instrument=XRP`; `GET /api/forecasts?instrument=XRP&horizon=90`, `POST /api/forecasts`, `DELETE /api/forecasts/{id}`; `GET /api/export`. Zapis wymaga obiektu JSON, ceny i wyniki są w USD. `GET /api/quotes` ocenia aktywne alerty i zwraca nowe `alertEvents`.
 

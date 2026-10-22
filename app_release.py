@@ -1,5 +1,5 @@
 """Release contract shared by the launcher and the local HTTP server."""
-APP_VERSION = '1.7.1'
+APP_VERSION = '1.7.2'
 FEATURES = ['interactive-chart', 'indicator-education']
 STATIC_PATHS = {
     '/': 'index.html', '/style.css': 'style.css', '/startup.js': 'startup.js',

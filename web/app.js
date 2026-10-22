@@ -198,7 +198,7 @@ function choosePreset(name){const p=catalog.presets[name];if(!p)return;document.
 async function initialize(){
  createQuoteCards();renderInstruments();
  try{
-  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.7.1 z nowego folderu.');catalog=await response.json();
+  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.7.2 z nowego folderu.');catalog=await response.json();
   let saved={};try{const value=JSON.parse(localStorage.getItem('inwestapp.settings')||'{}');saved=value&&typeof value==='object'?value:{};}catch{}
   const chosen=Array.isArray(saved.tools)?saved.tools.filter(t=>catalog.tools[t]):catalog.presets.balanced.tools;
   if(['trend','range'].includes(saved.strategy))$('strategy').value=saved.strategy;if(catalog.timeframes[saved.timeframe])$('timeframe').value=saved.timeframe;

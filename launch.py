@@ -6,16 +6,16 @@ import argparse
 import json
 from pathlib import Path
 import re
-import socket
 import subprocess
 import sys
 import urllib.request
 import webbrowser
 
 from app_release import APP_VERSION, FEATURES, STATIC_PATHS
+from local_server import port_busy, report_bind_error
 
 ROOT = Path(__file__).resolve().parent
-REQUIRED = ('server.py','app_release.py','analysis_engine.py','market_data.py','paper_bot.py',
+REQUIRED = ('server.py','app_release.py','local_server.py','analysis_engine.py','market_data.py','paper_bot.py',
             'agent_pipeline.py','okx_data.py','technical_tools.py','custom_indicators.py',
             'timeframes.py','user_data.py','news_data.py','strategy_lab.py','trader_mcp.py')
 
@@ -31,13 +31,6 @@ def installation_errors(root=ROOT):
             if not match or match.group(1)!=APP_VERSION:errors.append('Pliki interfejsu i serwera pochodza z roznych wersji.')
         except OSError:errors.append('Nie mozna odczytac plikow interfejsu.')
     return errors
-
-
-def port_busy(port):
-    try:
-        with socket.create_connection(('127.0.0.1',port),timeout=1):return True
-    except ConnectionRefusedError:return False
-    except OSError:return True  # uncertain connectivity must not start another worker
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -58,6 +51,24 @@ def running_release(port):
     except (OSError,ValueError,TypeError):return None
 
 
+def run_server(port):
+    child=subprocess.Popen([sys.executable,str(ROOT/'server.py'),'--port',str(port),'--open-browser'],cwd=ROOT)
+    try:
+        return child.wait()
+    except KeyboardInterrupt:
+        # Ctrl+C reaches both processes in the same console. Let the server
+        # finish its own shutdown instead of printing a launcher traceback.
+        print('\nZatrzymywanie aplikacji...',flush=True)
+        try:
+            return child.wait(timeout=10)
+        except (subprocess.TimeoutExpired,KeyboardInterrupt):
+            child.terminate()
+            try:return child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                return child.wait()
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Uruchom zweryfikowana wersje Inwestapp.')
     parser.add_argument('--port',type=int,default=8000)
@@ -69,19 +80,33 @@ def main(argv=None):
     if errors:
         print('\n'.join(errors));print('Rozpakuj CALY ZIP do nowego folderu i uruchom z niego Uruchom.bat.');return 2
     if args.check_installation:print('Pliki nowego wykresu i wyjasnien sa kompletne.');return 0
-    if port_busy(args.port):
+    running=None
+    try:
+        busy=port_busy(args.port)
+    except OSError as error:
+        # An exclusive Windows listener can reject bind with WSAEACCES too.
         running=running_release(args.port)
+        if not running:
+            report_bind_error(error,args.port)
+            return 4
+        busy=True
+    if busy:
+        if running is None:running=running_release(args.port)
         if running and running.get('version')==APP_VERSION and isinstance(running.get('features'),list) and set(FEATURES).issubset(running['features']):
             print('Ta wersja juz dziala. Otwieram istniejaca aplikacje, bez drugiego serwera.',flush=True)
             webbrowser.open(f'http://127.0.0.1:{args.port}/?v={APP_VERSION}');return 0
         version=running.get('version') if running else None
         print(f'\nPort {args.port} jest zajety'+(f' przez Inwestapp {version}.' if isinstance(version,str) and re.fullmatch(r'[0-9.]{1,20}',version) else '.'))
         print('Nowa wersja NIE zostala uruchomiona. Nie otwieram starszej aplikacji.')
-        print('1. W oknie terminala STAREJ aplikacji nacisnij Ctrl+C.')
-        print('2. Uruchom ponownie Uruchom.bat z TEGO nowego folderu.')
-        print('3. W przegladarce sprawdz numer 1.7.1 i nacisnij Ctrl+F5.')
+        if running:
+            print('W oknie terminala STAREJ aplikacji nacisnij Ctrl+C.')
+            print('Uruchom ponownie Uruchom.bat z TEGO nowego folderu.')
+        else:
+            print('Nie potwierdzono, ze ten proces to Inwestapp. Sprawdz w CMD:')
+            print(f'netstat -ano | findstr :{args.port}')
+            print('Skopiuj wynik do diagnostyki, aby ustalic program zajmujacy port.')
         return 3
-    return subprocess.call([sys.executable,str(ROOT/'server.py'),'--port',str(args.port),'--open-browser'],cwd=ROOT)
+    return run_server(args.port)
 
 
 if __name__=='__main__':sys.exit(main())

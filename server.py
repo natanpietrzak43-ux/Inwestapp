@@ -19,7 +19,8 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from datetime import datetime, timedelta, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from local_server import LocalHTTPServer, report_bind_error
 from pathlib import Path
 
 from analysis_engine import analyze, parameters
@@ -271,10 +272,9 @@ if __name__ == '__main__':
     parser.add_argument('--open-browser', action='store_true', help='Otwórz aplikację w przeglądarce po uruchomieniu.')
     args = parser.parse_args()
     try:
-        server = ThreadingHTTPServer((args.host, args.port), Handler)
-    except OSError:
-        print(f'Nie mozna uruchomic Inwestapp {APP_VERSION} na porcie {args.port}. Port moze byc zajety przez starsza aplikacje.',flush=True)
-        print('Zatrzymaj stary serwer przez Ctrl+C i uruchom Uruchom.bat z nowego folderu.',flush=True)
+        server = LocalHTTPServer((args.host, args.port), Handler)
+    except OSError as error:
+        report_bind_error(error,args.port)
         raise SystemExit(3)
     def bot_analysis(config):
         key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']];bars,fetched=fetch_bars(key,tf,config['source'])
