@@ -46,6 +46,15 @@ class HttpTests(unittest.TestCase):
         except urllib.error.HTTPError as exc:
             return exc.code,json.load(exc)
 
+    def test_release_and_versioned_assets_are_available_without_cache(self):
+        from app_release import APP_VERSION,FEATURES
+        status,health=self.request('/api/health');self.assertEqual(status,200);self.assertEqual(health['version'],APP_VERSION);self.assertEqual(health['features'],FEATURES)
+        for path in ('/startup.js','/chart.js','/education.js','/app.js'):
+            with urllib.request.urlopen(self.base+path+'?v='+APP_VERSION) as r:
+                self.assertEqual(r.status,200);self.assertIn('javascript',r.headers['Content-Type']);self.assertEqual(r.headers['Cache-Control'],'no-store');self.assertGreater(len(r.read()),100)
+        with urllib.request.urlopen(self.base+'/') as r:
+            html=r.read().decode();self.assertIn('data-ui-version="'+APP_VERSION+'"',html);self.assertIn('id="update-status"',html)
+
     def test_all_timeframes_in_http_keep_timestamps(self):
         for tf in ('15m','30m','1h','2h','4h','1d'):
             status,r=self.request('/api/analyze?mode=demo&timeframe='+tf)

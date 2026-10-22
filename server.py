@@ -1,5 +1,6 @@
 """Single-user local server. No broker connection or automatic orders."""
 import argparse
+from app_release import APP_VERSION, FEATURES, STATIC_PATHS
 import csv
 import io
 import json
@@ -124,7 +125,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
-            return self.send_json({'status': 'ok', 'version': '1.7.0', 'instruments': list(INSTRUMENTS)})
+            return self.send_json({'status': 'ok', 'version': APP_VERSION, 'instruments': list(INSTRUMENTS), 'features': FEATURES})
         if parsed.path=='/api/catalog':
             return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False}})
         if parsed.path == '/api/quotes':
@@ -192,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(user_data.forecast_summary(key,horizon,quote))
             except (ValueError,TypeError,KeyError) as exc:return self.send_json({'error':str(exc)},400)
             except (sqlite3.Error,OSError):return self.send_json({'error':'Baza danych jest niedostępna.'},503)
-        paths = {'/chart.js':'chart.js','/education.js':'education.js','/bot.js':'bot.js','/workspace.js':'workspace.js', '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+        paths = STATIC_PATHS
         if parsed.path not in paths:
             return self.send_json({'error': 'Nie znaleziono.'}, 404)
         file = ROOT / paths[parsed.path]
@@ -200,7 +201,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', {'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}[file.suffix[1:]])
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         try:self.wfile.write(raw)
         except (ConnectionError,TimeoutError):pass
@@ -269,16 +270,21 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--open-browser', action='store_true', help='Otwórz aplikację w przeglądarce po uruchomieniu.')
     args = parser.parse_args()
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), Handler)
+    except OSError:
+        print(f'Nie mozna uruchomic Inwestapp {APP_VERSION} na porcie {args.port}. Port moze byc zajety przez starsza aplikacje.',flush=True)
+        print('Zatrzymaj stary serwer przez Ctrl+C i uruchom Uruchom.bat z nowego folderu.',flush=True)
+        raise SystemExit(3)
     def bot_analysis(config):
         key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']];bars,fetched=fetch_bars(key,tf,config['source'])
         return package(key,bars,'live',config['capital'],config['risk'],config['costs'],fetched,tf,preset['tools'],preset['strategy'],config['slippage'],source=config['source'])
     bot_service=paper_bot.Service(lambda key,source:get_quotes([key],source=source)['quotes'][0],bot_analysis)
     bot_service.start()
     url = f'http://{args.host}:{args.port}'
-    print(f'Inwestapp v1.7: {url}', flush=True)
+    print(f'Inwestapp {APP_VERSION}: {url}', flush=True)
     if args.open_browser:
-        threading.Timer(1, lambda: webbrowser.open(url)).start()
+        threading.Timer(1, lambda: webbrowser.open(url+'/?v='+APP_VERSION)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

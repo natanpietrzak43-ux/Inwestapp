@@ -1,6 +1,22 @@
-# Inwestapp 1.7
+# Inwestapp 1.7.1
 
 Prywatny warsztat analizy technicznej XRP, XLM, BTC/USD, ETH/USD, srebra, ropy WTI i złota. Świece M15/M30/H1/H2/H4/D1, wybór narzędzi, pięć gotowych zestawów, plan ryzyka i test historyczny. Alerty cenowe, wiadomości RSS, dziennik transakcji, licznik wpisanych prognoz oraz bot papierowy i laboratorium strategii. Brak rzeczywistych zleceń i połączenia z brokerem.
+
+## Poprawka 1.7.1 — widoczność aktualizacji i wykrywanie starego serwera
+
+Jeśli w prawym górnym rogu widzisz **1.6**, oglądasz starszy interfejs. Funkcje interaktywnego wykresu i „?” są od wersji 1.7. Samo pobranie ZIP-a nie przełącza działającego serwera na nowy folder.
+
+1. W terminalu starej aplikacji naciśnij **Ctrl+C**.
+2. Rozpakuj **cały ZIP 1.7.1** do nowego folderu. Wejdź do folderu, w którym jest `Uruchom.bat` i `server.py`.
+3. Uruchom **Uruchom.bat z nowego folderu** i pozostaw jego okno otwarte.
+4. W przeglądarce naciśnij **Ctrl+F5**. U góry ma być **Interfejs 1.7.1 · serwer 1.7.1** i komunikat o wczytaniu wykresu oraz wyjaśnień.
+5. Kliknij **Otwórz nowy wykres** albo **Obejrzyj funkcje na danych demonstracyjnych**. Podgląd demonstracyjny jest wyraźnie oznaczony i pozwala sprawdzić funkcje, gdy dostawca notowań jest niedostępny. „?” znajdziesz przy narzędziach w sekcji **Twój zestaw analityczny**; pasek nawigacji i rysowania jest przy wykresie.
+
+Launcher `launch.py` sprawdza kompletność plików i zgodność wersji HTML. Jeśli na porcie działa starsza aplikacja, pokazuje jej wersję i instrukcję zatrzymania, kończy się kodem 3 i nie uruchamia drugiego bota ani nie otwiera starej strony. Nie zabija żadnych procesów i nie wybiera po cichu innego portu. Jeśli potwierdzi już działającą wersję 1.7.1 z wymaganymi funkcjami, otwiera istniejącą aplikację bez tworzenia drugiego serwera. `python launch.py --check-installation` sprawdza same pliki, bez uruchamiania bota.
+
+Strona sprawdza wersję serwera i wczytanie modułów. Przy niezgodności lub błędzie ładowania pokazuje widoczny komunikat. Pliki interfejsu mają adresy z numerem wersji, a odpowiedzi lokalnego serwera nagłówek `Cache-Control: no-store`. Wersja jest wspólna w `app_release.py`; dostęp do danych, wskaźniki, oznaczenia wykresu i osobiste rekordy nie są resetowane. Bezpośrednie uruchomienie `python server.py` pozostaje obsługiwane; przy zajętym porcie również kończy się czytelnym komunikatem.
+
+Sprawdzone: 154 testy Python/HTTP, w tym rzeczywisty test launchera przy zajętym porcie ze starszym serwerem; 14 testów modelu wykresu; testy przeglądarkowe dla nowego wykresu, wersji 1.7.1, podglądu bez dostępu do notowań, niezgodności wersji i brakującego modułu. Składnia i działanie skryptów Python sprawdzone w chmurze Linux; samego pliku BAT nie uruchamiano na Windowsie.
 
 ## Aktualizacja 1.7 — interaktywny wykres i wyjaśnienia wskaźników
 
@@ -228,7 +244,7 @@ node --check web/bot.js
 node --check tools/trader_mcp_bridge.cjs
 ```
 
-`GET /api/health` → `version=1.5.0`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
+`GET /api/health` → `version=1.7.1` i `features`. `GET /api/catalog` → narzędzia, zestawy, źródła. `GET /api/analyze?instrument=XRP&timeframe=1h&strategy=trend&tools=ema,rsi,adx,obv,bollinger` (domyślne H1 i zestaw podstawowy). `tools=` oznacza pusty zestaw, bez podstawiania domyślnych. `mode=demo` generuje oznaczone dane syntetyczne i zawsze blokuje rekomendacje transakcyjne. `GET /api/quotes` lub `?instrument=XRP`; HTTP 200 może zawierać błędy poszczególnych źródeł w `quotes[].status`. `POST /api/import`: JSON z `instrument`, `csv`, `timeframe`, `tools`, `strategy`, `capital`, `risk`, `costs`. Błędne parametry zwracają 400, nieudane pobranie historii 502.
 
 Nowe API: `GET/POST /api/alerts`, `POST /api/alerts/{id}/rearm`, `DELETE /api/alerts/{id}`; `GET /api/journal`, `POST /api/trades`, `PUT/DELETE /api/trades/{id}`; `GET /api/news?instrument=XRP`; `GET /api/forecasts?instrument=XRP&horizon=90`, `POST /api/forecasts`, `DELETE /api/forecasts/{id}`; `GET /api/export`. Zapis wymaga obiektu JSON, ceny i wyniki są w USD. `GET /api/quotes` ocenia aktywne alerty i zwraca nowe `alertEvents`.
 

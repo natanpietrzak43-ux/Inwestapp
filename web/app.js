@@ -198,7 +198,7 @@ function choosePreset(name){const p=catalog.presets[name];if(!p)return;document.
 async function initialize(){
  createQuoteCards();renderInstruments();
  try{
-  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.7 z nowego folderu.');catalog=await response.json();
+  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.7.1 z nowego folderu.');catalog=await response.json();
   let saved={};try{const value=JSON.parse(localStorage.getItem('inwestapp.settings')||'{}');saved=value&&typeof value==='object'?value:{};}catch{}
   const chosen=Array.isArray(saved.tools)?saved.tools.filter(t=>catalog.tools[t]):catalog.presets.balanced.tools;
   if(['trend','range'].includes(saved.strategy))$('strategy').value=saved.strategy;if(catalog.timeframes[saved.timeframe])$('timeframe').value=saved.timeframe;
@@ -206,6 +206,10 @@ async function initialize(){
   const names={trend:'Trend',momentum:'Momentum',volume:'Wolumen',regime:'Reżim',context:'Kontekst'};
   $('tool-options').replaceChildren(...Object.entries(catalog.tools).map(([id,tool])=>{const wrap=document.createElement('div');wrap.className='tool-option';const label=document.createElement('label');label.className='tool-choice';const input=document.createElement('input');input.type='checkbox';input.value=id;input.id='tool-'+id;input.checked=chosen.includes(id);const body=document.createElement('span'),title=document.createElement('strong'),group=document.createElement('small');title.textContent=tool.name;group.textContent=names[tool.group];body.append(title,group);label.append(input,body);wrap.append(label,ToolEducation.button(id,tool.name));input.onchange=()=>{$('preset').value='custom';load();};return wrap;}));
   $('preset').onchange=()=>{if($('preset').value!=='custom')choosePreset($('preset').value);};$('reset-tools').onclick=()=>choosePreset('balanced');$('strategy').onchange=()=>{$('preset').value='custom';load();};$('timeframe').onchange=()=>{importCsv=null;load();};
+  window.dispatchEvent(new Event('inwestapp:ready'));
   $('source-links').replaceChildren(...catalog.sources.map(s=>{const a=document.createElement('a');a.href=s.url;a.textContent=s.name;a.target='_blank';a.rel='noopener noreferrer';return a;}));load();
  }catch(err){$('loading').hidden=true;showError(err.message);startQuotePolling();}
 }
+
+$('show-chart').onclick=()=>{setTab('analysis');(data?$('price-chart'):$('error').hidden?$('notice'):$('error')).scrollIntoView({behavior:'smooth',block:'center'});};
+$('demo-chart').onclick=async()=>{$('mode').value='demo';importCsv=null;setTab('analysis');await load();if(data)$('price-chart').scrollIntoView({behavior:'smooth',block:'center'});};
