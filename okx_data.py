@@ -1,4 +1,4 @@
-"""Read-only OKX spot market data. No credentials, account or order endpoints.
+"""Read-only OKX spot/perpetual market data. No account or order endpoints.
 
 USDT prices remain USDT. Closed candles only; gaps are never filled. A bounded
 history cache makes subsequent requests incremental instead of reloading pages.
@@ -21,9 +21,10 @@ _LOCKS = {(key,tf):threading.Lock() for key in SYMBOLS for tf in BARS}
 CACHE_DIR = Path(__file__).parent / '.cache' / 'okx'
 
 
-def symbol(key):
+def symbol(key,market='spot'):
     if key not in SYMBOLS:raise ValueError('OKX obsługuje w tej aplikacji tylko XRP, XLM, BTC i ETH spot / USDT.')
-    return SYMBOLS[key]
+    if market not in ('spot','perpetual'):raise ValueError('Nieprawidłowy rynek OKX.')
+    return SYMBOLS[key]+('-SWAP' if market=='perpetual' else '')
 
 
 def number(value, positive=True):
@@ -44,16 +45,23 @@ def request(path,params):
     return payload['data']
 
 
-def ticker(key):
-    inst=symbol(key);rows=request('/api/v5/market/ticker',{'instId':inst})
+def ticker(key,market='spot'):
+    inst=symbol(key,market);rows=request('/api/v5/market/ticker',{'instId':inst})
     if len(rows)!=1 or rows[0].get('instId')!=inst:raise ValueError('Nieprawidłowy instrument z OKX.')
     q=rows[0];bid=number(q['bidPx']);ask=number(q['askPx']);stamp=number(q['ts'])/1000
     if bid>ask or not 0<=time.time()-stamp<=120:raise ValueError('Nieprawidłowy spread lub nieaktualny czas OKX.')
-    return {'provider':'OKX','source':'okx','sourceSymbol':inst,'currency':'USDT','price':number(q['last']),
+    result={'provider':'OKX','source':'okx','sourceSymbol':inst,'currency':'USDT','price':number(q['last']),
             'bid':bid,'ask':ask,'timestamp':stamp,'timingType':'exchange','delaySeconds':0,'marketState':'continuous'}
+    if market=='perpetual':
+        marks=request('/api/v5/public/mark-price',{'instType':'SWAP','instId':inst})
+        if len(marks)!=1 or marks[0].get('instId')!=inst:raise ValueError('Brak poprawnego mark price kontraktu.')
+        mark=marks[0];mark_stamp=number(mark['ts'])/1000
+        if not 0<=time.time()-mark_stamp<=120:raise ValueError('Nieaktualny mark price kontraktu.')
+        result.update(markPrice=number(mark['markPx']),markTimestamp=mark_stamp,market=market)
+    return result
 
 
-def _decode(row,tf,now):
+def _decode(row,tf,now,market='spot'):
     if not isinstance(row,list) or len(row)<9 or row[8] not in ('0','1'):raise ValueError('Nieprawidłowa świeca OKX.')
     ts=number(row[0])/1000
     if ts%SECONDS[tf]!=0:raise ValueError('Świeca OKX nie leży na granicy interwału UTC.')
@@ -63,11 +71,11 @@ def _decode(row,tf,now):
     if not low<=min(op,close)<=max(op,close)<=high:raise ValueError('Nieprawidłowy zakres OHLC z OKX.')
     date=datetime.fromtimestamp(ts,timezone.utc)
     return {'date':date.strftime('%Y-%m-%d') if tf=='1d' else date.isoformat(),
-            **dict(zip(('open','high','low','close'),values)),'volume':number(row[5],False)}
+            **dict(zip(('open','high','low','close'),values)),'volume':number(row[6] if market=='perpetual' else row[5],False)}
 
 
-def candles(key,tf='1h'):
-    inst=symbol(key)
+def candles(key,tf='1h',market='spot'):
+    inst=symbol(key,market)
     if tf not in BARS:raise ValueError('Nieprawidłowy interwał OKX.')
     with _LOCKS[(key,tf)]:
         path=CACHE_DIR/(inst+'-'+tf+'.json');cached=None
@@ -88,7 +96,7 @@ def candles(key,tf='1h'):
             if cursor is not None and oldest>=cursor:raise ValueError('Paginacja OKX nie przesuwa historii wstecz.')
             reached=False
             for raw in page:
-                bar=_decode(raw,tf,now)
+                bar=_decode(raw,tf,now,market)
                 if bar is None:continue
                 date=bar['date']
                 if date in seen and history[date]!=bar:raise ValueError('Sprzeczne duplikaty świec z OKX.')

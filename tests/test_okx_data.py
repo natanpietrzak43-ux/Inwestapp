@@ -61,3 +61,22 @@ class OKXTests(unittest.TestCase):
         self.assertEqual(q['status'],'error');fallback.assert_not_called()
     def test_unsupported_instrument_is_rejected(self):
         with self.assertRaises(ValueError):okx.candles('GOLD')
+
+    def test_perpetual_ticker_requires_matching_fresh_mark_price(self):
+        ticker=self.ticker(instId='XLM-USDT-SWAP')
+        mark={'instId':'XLM-USDT-SWAP','markPx':'.25','ts':str(int(self.now*1000))}
+        with patch('okx_data.request',side_effect=[[ticker],[mark]]) as call:
+            result=okx.ticker('XLM','perpetual')
+        self.assertEqual(result['sourceSymbol'],'XLM-USDT-SWAP');self.assertEqual(result['markPrice'],.25)
+        self.assertEqual(call.call_args_list[1].args[0],'/api/v5/public/mark-price')
+        for changes in ({'instId':'XLM-USDT'},{'markPx':'NaN'},{'ts':str(int((self.now-121)*1000))}):
+            with self.subTest(changes=changes),patch('okx_data.request',side_effect=[[ticker],[{**mark,**changes}]]),self.assertRaises(ValueError):okx.ticker('XLM','perpetual')
+
+    def test_perpetual_history_uses_base_volume_and_distinct_cache(self):
+        rows=self.rows()
+        for market,expected_volume in [('spot',123),('perpetual',12300)]:
+            with patch('okx_data.request',side_effect=[rows[:100],rows[100:200],rows[200:]]) as call,patch('okx_data.time.sleep'):
+                bars,_=okx.candles('XLM','1h',market)
+            self.assertEqual(bars[0]['volume'],expected_volume)
+            self.assertEqual(call.call_args_list[0].args[1]['instId'],'XLM-USDT'+('-SWAP' if market=='perpetual' else ''))
+        self.assertTrue((Path(self.temp.name)/'XLM-USDT-1h.json').is_file());self.assertTrue((Path(self.temp.name)/'XLM-USDT-SWAP-1h.json').is_file())

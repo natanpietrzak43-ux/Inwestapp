@@ -1,4 +1,6 @@
-"""One-instrument, long-only paper account. No exchange credentials or order API.
+"""One-instrument paper account: spot long or simulated isolated perpetuals.
+
+No exchange credentials or authenticated order API.
 
 Signals use closed candles; fills use the first fresh observed quote timestamped
 AFTER the decision. Missed quotes are never reconstructed into pretend fills.
@@ -9,6 +11,8 @@ import threading
 import time
 import uuid
 import agent_pipeline
+import leveraged_trading as leverage
+import okx_data
 from contextlib import contextmanager
 from datetime import datetime,timezone
 
@@ -28,6 +32,7 @@ def storage(write=False):
         conn.execute('CREATE TABLE IF NOT EXISTS strategy_research(id TEXT PRIMARY KEY,created_at TEXT,data TEXT NOT NULL)')
         conn.execute('CREATE TABLE IF NOT EXISTS agent_cycles(id TEXT PRIMARY KEY,created_at TEXT,data TEXT NOT NULL)')
         conn.execute('CREATE TABLE IF NOT EXISTS paper_accounts(id TEXT PRIMARY KEY,created_at TEXT,data TEXT NOT NULL)')
+        conn.execute('CREATE TABLE IF NOT EXISTS bot_backtests(id TEXT PRIMARY KEY,created_at TEXT,data TEXT NOT NULL)')
         if write:conn.execute('BEGIN IMMEDIATE')
         yield conn
 
@@ -56,7 +61,11 @@ def configuration(body):
     source=body.get('source','reference');engine=body.get('engine','agents')
     if source not in ('reference','okx') or engine not in ('classic','agents'):raise ValueError('Nieprawidłowe źródło lub silnik bota.')
     if source=='okx' and INSTRUMENTS[key]['kind']!='crypto':raise ValueError('OKX: wybierz XRP, XLM, BTC lub ETH / USDT.')
+    contract=leverage.options(body)
+    if contract['market']=='perpetual' and (source!='okx' or engine!='agents' or INSTRUMENTS[key]['kind']!='crypto'):
+        raise ValueError('Futures wymagają źródła OKX, zespołu agentów i instrumentu XRP/XLM/BTC/ETH.')
     return {'instrument':key,'timeframe':tf,'preset':preset,'capital':capital,'risk':risk,'costs':costs,
+            **contract,
             'source':source,'engine':engine,'currency':'USDT' if source=='okx' else 'USD',
             'slippage':numeric(body.get('slippage',5),0,100),'daily_loss':numeric(body.get('daily_loss',3),.1,20),
             'max_drawdown':numeric(body.get('max_drawdown',10),1,50),'max_spread':numeric(body.get('max_spread',30),1,200),
@@ -75,6 +84,7 @@ def start(body,new_account=False):
         if state and state['position'] and state['config']!=config:raise ValueError('Najpierw zamknij papierową pozycję, zanim zmienisz konfigurację.')
         if state and state['tradeCount'] and state['config']['capital']!=config['capital']:raise ValueError('Kapitał początkowy istniejącego konta jest stały; zmień inne parametry.')
         if state and state['tradeCount'] and state['config']['currency']!=config['currency']:raise ValueError('Istniejące konto ma inną walutę. Nie przeliczamy USD i USDT 1:1. Zatrzymaj bota i wybierz Nowe konto symulacyjne; dotychczasowe wyniki zostaną zarchiwizowane.')
+        if state and state['tradeCount'] and state['config']['market']!=config['market']:raise ValueError('Zmiana spot/futures wymaga Nowego konta symulacyjnego. Dotychczasowa historia pozostanie w archiwum.')
         if state and state.get('riskHalted')=='drawdown':raise ValueError('Konto przekroczyło limit obsunięcia. Start nie zeruje szczytu; oceń wyniki przed utworzeniem nowego konta symulacyjnego.')
         if state is None:
             state={'accountId':str(uuid.uuid4()),'cash':config['capital'],'position':None,'pending':None,'tradeCount':0,'realized':0,'day':None,'dayEquity':config['capital'],
@@ -96,7 +106,7 @@ def stop():
         state=_read(conn)
         if state:
             state['active']=False
-            if state.get('pending',{} ) and state['pending']['side']=='BUY':state['pending']=None
+            if state.get('pending',{} ) and state['pending']['side'] in ('BUY','LONG','SHORT'):state['pending']=None
             state['status']='Nowe wejścia zatrzymane. Otwarta pozycja nadal podlega stopowi/celowi podczas pracy serwera.'
             _save(conn,state);event(conn,'stop',state['status'])
     return status()
@@ -106,7 +116,7 @@ def close_position():
     with storage(True) as conn:
         state=_read(conn)
         if not state or not state['position']:raise ValueError('Nie ma otwartej pozycji papierowej.')
-        state['pending']={'side':'SELL','created':time.time(),'reason':'Zamknięcie na żądanie użytkownika'}
+        state['pending']={'side':'CLOSE' if state['config']['market']=='perpetual' else 'SELL','created':time.time(),'reason':'Zamknięcie na żądanie użytkownika'}
         _save(conn,state);event(conn,'order','Zlecono papierowe zamknięcie przy kolejnej świeżej cenie.')
     return status()
 
@@ -115,9 +125,9 @@ def current_state():
     with storage() as conn:return _read(conn)
 
 
-def fresh(q,key,now=None,currency='USD',source='reference'):
+def fresh(q,key,now=None,currency='USD',source='reference',market='spot'):
     now=time.time() if now is None else now
-    try:return q.get('status')=='ok' and q.get('instrument')==key and q.get('currency')==currency and (source!='okx' or (q.get('provider')=='OKX' and q.get('sourceSymbol')==key+'-USDT')) and 0<=now-q['timestamp']<=(120 if INSTRUMENTS[key]['kind']=='crypto' else 1200) and math.isfinite(q['price']) and q['price']>0 and (source!='okx' or (all(math.isfinite(q[k]) for k in ('bid','ask')) and 0<q['bid']<=q['ask']))
+    try:return q.get('status')=='ok' and q.get('instrument')==key and q.get('currency')==currency and (source!='okx' or (q.get('provider')=='OKX' and q.get('sourceSymbol')==okx_data.symbol(key,market))) and 0<=now-q['timestamp']<=(120 if INSTRUMENTS[key]['kind']=='crypto' else 1200) and math.isfinite(q['price']) and q['price']>0 and (source!='okx' or (all(math.isfinite(q[k]) for k in ('bid','ask')) and 0<q['bid']<=q['ask'])) and (market!='perpetual' or (math.isfinite(q['markPrice']) and q['markPrice']>0 and 0<=now-q['markTimestamp']<=120))
     except (KeyError,TypeError):return False
 
 
@@ -129,11 +139,11 @@ def status():
         trades=_records(conn,'paper_trades',account,200)
         archives=[json.loads(r['data']) for r in conn.execute('SELECT data FROM paper_accounts ORDER BY created_at DESC LIMIT 30')]
     if state:
-        quote=state.get('lastQuote') or {};valid=state.get('lastQuoteValid',False) and fresh(quote,state['config']['instrument'],currency=state['config']['currency'],source=state['config']['source'])
+        quote=state.get('lastQuote') or {};valid=state.get('lastQuoteValid',False) and fresh(quote,state['config']['instrument'],currency=state['config']['currency'],source=state['config']['source'],market=state['config']['market'])
         state['valuationFresh']=valid;state['equity']=state['lastEquity'] if valid or not state['position'] else None
         state['dailyPnl']=state['lastEquity']-state['dayEquity'] if (valid or not state['position']) and state['day']==datetime.now(timezone.utc).date().isoformat() else None
     return {'mode':'paper','state':state,'events':events,'trades':trades,'workerSeconds':15,'cycles':cycles(),'archives':archives,
-            'notice':'Papierowa ekspozycja long bez dźwigni: OKX w USDT, Coinbase/Yahoo w USD. Nie przeliczamy walut 1:1. Praca wymaga uruchomionego serwera; aktywny stan wznawia się po restarcie. Stop/cel na zaobserwowanych cenach, bez gwarancji wykrycia ruchów pomiędzy odczytami. Agenci to lokalne reguły wskaźników, bez LLM. Surowce to referencyjna ekspozycja z mnożnikiem 1.'}
+            'notice':'Spot: long bez dźwigni. Futures: symulacja long/short OKX USDT-SWAP, depozyt izolowany, dźwignia 1–10. Funding i maintenance margin są założeniami użytkownika, nie rozliczeniem OKX; ilość w jednostkach bazowych. Praca wymaga serwera, aktywny stan wznawia się po restarcie. Stop/cel na zaobserwowanych cenach. Agenci to lokalne reguły. Surowce: referencyjna ekspozycja z mnożnikiem 1.'}
 
 
 def _sell(conn,state,q,reason,cycle_id=None):
@@ -166,6 +176,11 @@ def advance(run_id,quote,analysis=None,now=None,analysis_error=False):
     with storage(True) as conn:
         state=_read(conn)
         if not state or state['run_id']!=run_id:return
+        if state['config']['market']=='perpetual':
+            from futures_bot import advance as futures_advance
+            futures_advance(conn,state,quote,analysis,now,analysis_error,event)
+            _save(conn,state)
+            return
         cfg=state['config'];agent_mode=cfg['engine']=='agents';cycle=None;executed=None
         state['lastHeartbeat']=now_iso();old_status=state['status']
         valid=fresh(quote,cfg['instrument'],now,cfg['currency'],cfg['source']);state['lastQuoteValid']=valid
@@ -286,7 +301,11 @@ class Service:
             try:
                 if state['active'] or cfg['engine']=='agents':analysis=self.analysis_provider(cfg)
             except Exception:analysis_error=True
-        try:q=self.quote_provider(cfg['instrument'],cfg['source'])
+        try:
+            if cfg['market']=='perpetual':
+                q={**okx_data.ticker(cfg['instrument'],'perpetual'),'instrument':cfg['instrument'],'status':'ok'}
+                q['asOf']=datetime.fromtimestamp(q['timestamp'],timezone.utc).isoformat()
+            else:q=self.quote_provider(cfg['instrument'],cfg['source'])
         except Exception:q={'status':'error','instrument':cfg['instrument']}
         if not self.shutdown.is_set():advance(state['run_id'],q,analysis,analysis_error=analysis_error)
     def run(self):
@@ -311,3 +330,21 @@ def save_research(record):
 
 def research_records():
     with storage() as conn:return [json.loads(r['data']) for r in conn.execute('SELECT data FROM strategy_research ORDER BY created_at DESC LIMIT 30')]
+
+
+def save_backtest(report):
+    record={**report,'id':str(uuid.uuid4()),'created_at':now_iso()}
+    with storage(True) as conn:conn.execute('INSERT INTO bot_backtests VALUES(?,?,?)',(record['id'],record['created_at'],json.dumps(record)))
+    return record
+
+
+def backtest_records():
+    with storage() as conn:
+        return [{k:v for k,v in json.loads(r['data']).items() if k not in ('equity','trades','blockedEntries')} for r in conn.execute('SELECT data FROM bot_backtests ORDER BY created_at DESC LIMIT 20')]
+
+
+def backtest_record(identifier):
+    with storage() as conn:
+        row=conn.execute('SELECT data FROM bot_backtests WHERE id=?',(identifier,)).fetchone()
+        if not row:raise ValueError('Nie znaleziono raportu historycznego.')
+        return json.loads(row['data'])

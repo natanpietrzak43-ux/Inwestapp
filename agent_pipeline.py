@@ -27,7 +27,7 @@ def quality(analysis,quote,cfg,now):
         try:rows=validate_bars(analysis['bars'],tf)
         except (ValueError,TypeError,KeyError,IndexError):reasons.append('Niepoprawne, niezamknięte lub zbyt krótkie OHLCV.')
         if analysis.get('mode')!='live' or analysis.get('stale'):reasons.append('Analiza demonstracyjna, importowana lub nieaktualna.')
-        if analysis.get('source','reference')!=source or analysis.get('currency','USD')!=currency:reasons.append('Źródło lub waluta świec nie zgadza się z kontem.')
+        if analysis.get('source','reference')!=source or analysis.get('currency','USD')!=currency or analysis.get('market','spot')!=cfg.get('market','spot'):reasons.append('Źródło, rynek lub waluta świec nie zgadza się z kontem.')
         if analysis.get('instrument',{}).get('id')!=key or analysis.get('timeframe')!=tf:reasons.append('Instrument lub interwał świec nie zgadza się z botem.')
         try:
             fetched=datetime.fromisoformat(analysis['fetchedAt'].replace('Z','+00:00'))
@@ -38,7 +38,8 @@ def quality(analysis,quote,cfg,now):
             or not finite(quote.get('price')) or quote['price']<=0 or not finite(quote.get('timestamp'))
             or not 0<=now-quote['timestamp']<=(120 if INSTRUMENTS[key]['kind']=='crypto' else 1200)):
             reasons.append('Brak świeżej ceny zgodnej z instrumentem i walutą.')
-        if source=='okx' and (quote.get('provider')!='OKX' or quote.get('sourceSymbol')!=key+'-USDT'):reasons.append('Cena nie pochodzi z wybranej pary OKX spot.')
+        expected=key+'-USDT'+('-SWAP' if cfg.get('market')=='perpetual' else '')
+        if source=='okx' and (quote.get('provider')!='OKX' or quote.get('sourceSymbol')!=expected):reasons.append('Cena nie pochodzi z wybranej pary i rynku OKX.')
         if source=='okx' and (not all(finite(quote.get(k)) and quote[k]>0 for k in ('bid','ask')) or quote['bid']>quote['ask']):reasons.append('Brak poprawnego bid/ask OKX.')
     except (TypeError,KeyError):reasons.append('Niepoprawny odczyt ceny.')
     if rows:

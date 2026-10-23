@@ -10,6 +10,8 @@ import paper_bot
 import trader_mcp
 import strategy_lab
 import okx_data
+import bot_backtest
+import strategy_sources
 import user_data
 from news_data import get_news
 import math
@@ -128,7 +130,15 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == '/api/health':
             return self.send_json({'status': 'ok', 'version': APP_VERSION, 'instruments': list(INSTRUMENTS), 'features': FEATURES})
         if parsed.path=='/api/catalog':
-            return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False}})
+            return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False},
+                                   'botMarkets':{'spot':{'paperOnly':True,'leverageMax':1},'perpetual':{'paperOnly':True,'source':'okx','instruments':list(okx_data.SYMBOLS),'leverageMin':1,'leverageMax':10,'margin':'isolated_simulation'}}})
+        if parsed.path=='/api/bot/backtests':
+            identifier=urllib.parse.parse_qs(parsed.query).get('id',[None])[0]
+            if identifier:
+                try:return self.send_json(paper_bot.backtest_record(identifier))
+                except ValueError as error:return self.send_json({'error':str(error)},404)
+            return self.send_json({'records':paper_bot.backtest_records()})
+        if parsed.path=='/api/strategies/sources':return self.send_json(strategy_sources.catalog())
         if parsed.path == '/api/quotes':
             query = urllib.parse.parse_qs(parsed.query,keep_blank_values=True)
             key = query.get('instrument', [None])[0]
@@ -220,13 +230,32 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<length<=9_000_000:raise ValueError('Żądanie może mieć maksymalnie 9 MB.')
             body=json.loads(self.rfile.read(length))
             if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
-            if method=='POST' and self.path in ('/api/bot/start','/api/bot/account','/api/bot/stop','/api/bot/close','/api/strategies/test','/api/mcp/research'):
+            if method=='POST' and self.path in ('/api/bot/start','/api/bot/account','/api/bot/stop','/api/bot/close','/api/bot/backtest','/api/strategies/source','/api/strategies/test','/api/mcp/research'):
                 if self.path=='/api/bot/start':return self.send_json(paper_bot.start(body))
                 if self.path=='/api/bot/account':return self.send_json(paper_bot.start(body,new_account=True))
                 if self.path=='/api/bot/stop':return self.send_json(paper_bot.stop())
                 if self.path=='/api/bot/close':return self.send_json(paper_bot.close_position())
-                if self.path=='/api/mcp/research':return self.send_json(paper_bot.save_research(trader_mcp.fetch_research(body.get('tool'),body.get('arguments'))))
+                if self.path=='/api/mcp/research':
+                    ctx=strategy_sources.context(body)
+                    record=trader_mcp.fetch_research(body.get('tool'),body.get('arguments'));record['context']=ctx
+                    return self.send_json(paper_bot.save_research(record))
+                if self.path=='/api/strategies/source':return self.send_json(paper_bot.save_research(strategy_sources.fetch(body)))
+                if self.path=='/api/bot/backtest':
+                    mode=body.get('mode','live')
+                    config=paper_bot.configuration({**body,'source':'reference'} if mode=='csv' and body.get('market','spot')=='spot' else body);key=config['instrument'];tf=config['timeframe']
+                    if mode=='live':
+                        try:bars,_=okx_data.candles(key,tf,'perpetual') if config['market']=='perpetual' else fetch_bars(key,tf,config['source'])
+                        except Exception:return self.send_json({'error':'Brak historii wybranego rynku. Nie zastąpiono jej danymi spot ani demonstracją.'},502)
+                    elif mode=='demo':bars=demo_bars(key,tf)
+                    elif mode=='csv' and isinstance(body.get('csv'),str) and config['market']=='spot':
+                        if body.get('csv_instrument')!=key or body.get('csv_timeframe')!=tf:raise ValueError('Instrument i interwał testu muszą zgadzać się z importem CSV.')
+                        bars=list(csv.DictReader(io.StringIO(body['csv'].lstrip('\ufeff'))))
+                    else:raise ValueError('Wybierz historię dostawcy lub demonstrację; CSV tylko dla spot.')
+                    report=bot_backtest.run(bars,config,body.get('start_date'),body.get('end_date'),body.get('spread_bps',10))
+                    report.update(instrument=key,market=config['market'],mode=mode,currency=config['currency'],source=config['source'] if mode=='live' else mode,demo=mode=='demo')
+                    return self.send_json(paper_bot.save_backtest(report))
                 mode=body.get('mode','live');config=paper_bot.configuration(body if mode=='live' else {**body,'source':'reference'});key=config['instrument'];tf=config['timeframe']
+                if config['market']!='spot':raise ValueError('Porównanie pięciu zestawów jest dla spot. Futures przetestuj w Symulacji bota na historii.')
                 if mode=='live':
                     try:bars,_=fetch_bars(key,tf,config['source']) if config['source']=='okx' else fetch_bars(key,tf)
                     except Exception:return self.send_json({'error':'Brak historii od dostawcy; nie podstawiono demonstracji.'},502)
@@ -277,7 +306,14 @@ if __name__ == '__main__':
         report_bind_error(error,args.port)
         raise SystemExit(3)
     def bot_analysis(config):
-        key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']];bars,fetched=fetch_bars(key,tf,config['source'])
+        key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']]
+        if config['market']=='perpetual':
+            from analysis_engine import indicators
+            bars,fetched=okx_data.candles(key,tf,'perpetual')
+            report=bot_backtest.run(bars,config,ledger=False)
+            return {'bars':bars,'indicators':indicators(bars),'historyGuard':report['historyGuard'],'lastDate':bars[-1]['date'],
+                    'instrument':{'id':key},'timeframe':tf,'source':'okx','currency':'USDT','market':'perpetual','mode':'live','stale':False,'fetchedAt':fetched}
+        bars,fetched=fetch_bars(key,tf,config['source'])
         return package(key,bars,'live',config['capital'],config['risk'],config['costs'],fetched,tf,preset['tools'],preset['strategy'],config['slippage'],source=config['source'])
     bot_service=paper_bot.Service(lambda key,source:get_quotes([key],source=source)['quotes'][0],bot_analysis)
     bot_service.start()

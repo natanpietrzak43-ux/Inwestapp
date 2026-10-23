@@ -55,6 +55,48 @@ class HttpTests(unittest.TestCase):
         with urllib.request.urlopen(self.base+'/') as r:
             html=r.read().decode();self.assertIn('data-ui-version="'+APP_VERSION+'"',html);self.assertIn('id="update-status"',html)
 
+    def test_historical_bot_report_is_persistent_and_does_not_change_paper_state(self):
+        before=self.request('/api/bot')[1]['state']
+        status,report=self.request('/api/bot/backtest',{'mode':'demo','market':'perpetual','source':'okx','engine':'agents','instrument':'XLM','leverage':3})
+        self.assertEqual(status,200);self.assertTrue(report['demo']);self.assertEqual(report['market'],'perpetual');self.assertEqual(report['currency'],'USDT')
+        self.assertGreater(report['bars'],0);self.assertEqual(len(report['equity']),report['bars']);self.assertFalse(report['historicalGuardReplayed'])
+        self.assertEqual(self.request('/api/bot')[1]['state'],before)
+        summaries=self.request('/api/bot/backtests')[1]['records'];self.assertTrue(any(r['id']==report['id'] for r in summaries));self.assertNotIn('equity',summaries[0])
+        self.assertEqual(self.request('/api/bot/backtests?id='+report['id'])[1],report)
+        self.assertEqual(self.request('/api/bot/backtests?id=missing')[0],404)
+        exported=self.request('/api/export')[1]['tables'];self.assertTrue(any(r['id']==report['id'] for r in exported['bot_backtests']))
+
+    def test_futures_history_uses_only_contract_series_and_failure_never_falls_back(self):
+        body={'market':'perpetual','source':'okx','engine':'agents','instrument':'BTC','leverage':2}
+        with patch('server.okx_data.candles',return_value=(demo_bars('BTC','1h'),'test')) as fetch,patch('server.fetch_bars') as fallback:
+            status,report=self.request('/api/bot/backtest',body)
+        self.assertEqual(status,200);fetch.assert_called_once_with('BTC','1h','perpetual');fallback.assert_not_called()
+        with patch('server.okx_data.candles',side_effect=OSError('offline')),patch('server.fetch_bars') as fallback:
+            self.assertEqual(self.request('/api/bot/backtest',body)[0],502)
+        fallback.assert_not_called()
+        self.assertEqual(self.request('/api/bot/backtest',{**body,'mode':'csv','csv':'date,open'})[0],400)
+
+    def test_source_import_keeps_instrument_context_and_inert_code(self):
+        original=urllib.request.urlopen
+        def transport(request,*args,**kwargs):
+            if getattr(request,'full_url','').startswith('https://raw.githubusercontent.com/'):
+                return io.BytesIO(b'print("must not execute")\n# <script>alert(1)</script>')
+            return original(request,*args,**kwargs)
+        with patch('strategy_sources.urllib.request.urlopen',side_effect=transport):
+            status,record=self.request('/api/strategies/source',{'template':'strategy001','instrument':'ETH','timeframe':'4h','market':'perpetual'})
+        self.assertEqual(status,200);self.assertFalse(record['verified']);self.assertEqual(record['context']['instrument'],'ETH')
+        self.assertFalse(record['context']['suitabilityVerified']);self.assertEqual(len(record['sha256']),64);self.assertEqual(record['license'],'GPL-3.0')
+        self.assertIn('<script>',record['content']['code']);self.assertEqual(len(self.request('/api/strategies/sources')[1]['templates']),3)
+        self.assertEqual(self.request('/api/strategies/source',{'template':'../../private','instrument':'ETH'})[0],400)
+        self.assertEqual(self.request('/api/strategies/source',{'template':'strategy001','instrument':'GOLD','market':'perpetual'})[0],400)
+
+    def test_csv_bot_replay_keeps_usd_and_requires_matching_import_context(self):
+        stream=io.StringIO();writer=csv.DictWriter(stream,fieldnames=['date','open','high','low','close','volume']);writer.writeheader();writer.writerows(demo_bars('XRP','1h')[:230])
+        body={'mode':'csv','instrument':'XRP','timeframe':'1h','source':'okx','market':'spot','csv':stream.getvalue(),'csv_instrument':'XRP','csv_timeframe':'1h'}
+        status,report=self.request('/api/bot/backtest',body)
+        self.assertEqual(status,200);self.assertEqual(report['currency'],'USD');self.assertEqual(report['source'],'csv');self.assertEqual(report['config']['source'],'reference')
+        self.assertEqual(self.request('/api/bot/backtest',{**body,'csv_instrument':'BTC'})[0],400)
+
     def test_all_timeframes_in_http_keep_timestamps(self):
         for tf in ('15m','30m','1h','2h','4h','1d'):
             status,r=self.request('/api/analyze?mode=demo&timeframe='+tf)

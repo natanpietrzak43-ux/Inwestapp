@@ -46,3 +46,20 @@ EMA21 (green), EMA89 (white with a dark readability outline) and EMA200 (red).
 It uses the user's supplied configuration; the original Mercado script was
 not available for direct code comparison. Attribution identifies the requested
 configuration, not a claim of endorsement or copying of unavailable code.
+
+
+## Publiczne materiały Freqtrade (import badawczy od 1.8)
+
+Importer pobiera na żądanie użytkownika trzy pliki z oficjalnego repozytorium
+https://github.com/freqtrade/freqtrade-strategies w wersji
+`f3340ce11f5bdf62f598522e64d1f5638eaa13f5`:
+`user_data/strategies/Strategy001.py`, `Strategy002.py` oraz
+`user_data/strategies/berlinguyinca/ADXMomentum.py`. Autorzy i komentarze pozostają
+w pobranym źródle; repozytorium udostępnia licencję GPL-3.0. Rekord materiału
+zapisuje adres konkretnego źródła, commit, SHA-256 i link do pełnej licencji:
+https://github.com/freqtrade/freqtrade-strategies/blob/f3340ce11f5bdf62f598522e64d1f5638eaa13f5/LICENSE .
+
+Pliki te nie są dołączone do ZIP-a aplikacji, importowane jako moduły Pythona
+ani wykonywane. Pozostają tekstowymi materiałami badawczymi w osobistej bazie.
+Lokalne reguły i symulator Inwestapp nie są implementacją tych pobranych strategii.
+Sam kontekst instrumentu nie potwierdza ich zgodności ani skuteczności.

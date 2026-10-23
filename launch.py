@@ -15,7 +15,7 @@ from app_release import APP_VERSION, FEATURES, STATIC_PATHS
 from local_server import port_busy, report_bind_error
 
 ROOT = Path(__file__).resolve().parent
-REQUIRED = ('server.py','app_release.py','local_server.py','analysis_engine.py','market_data.py','paper_bot.py',
+REQUIRED = ('server.py','app_release.py','local_server.py','leveraged_trading.py','futures_bot.py','bot_backtest.py','strategy_sources.py','analysis_engine.py','market_data.py','paper_bot.py',
             'agent_pipeline.py','okx_data.py','technical_tools.py','custom_indicators.py',
             'timeframes.py','user_data.py','news_data.py','strategy_lab.py','trader_mcp.py')
 
