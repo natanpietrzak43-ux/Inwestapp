@@ -59,7 +59,7 @@ class HttpTests(unittest.TestCase):
         before=self.request('/api/bot')[1]['state']
         status,report=self.request('/api/bot/backtest',{'mode':'demo','market':'perpetual','source':'okx','engine':'agents','instrument':'XLM','leverage':3})
         self.assertEqual(status,200);self.assertTrue(report['demo']);self.assertEqual(report['market'],'perpetual');self.assertEqual(report['currency'],'USDT')
-        self.assertGreater(report['bars'],0);self.assertEqual(len(report['equity']),report['bars']);self.assertFalse(report['historicalGuardReplayed'])
+        self.assertGreater(report['bars'],0);self.assertEqual(len(report['equity']),report['bars']);self.assertTrue(report['historicalGuardReplayed'])
         self.assertEqual(self.request('/api/bot')[1]['state'],before)
         summaries=self.request('/api/bot/backtests')[1]['records'];self.assertTrue(any(r['id']==report['id'] for r in summaries));self.assertNotIn('equity',summaries[0])
         self.assertEqual(self.request('/api/bot/backtests?id='+report['id'])[1],report)
@@ -96,6 +96,30 @@ class HttpTests(unittest.TestCase):
         status,report=self.request('/api/bot/backtest',body)
         self.assertEqual(status,200);self.assertEqual(report['currency'],'USD');self.assertEqual(report['source'],'csv');self.assertEqual(report['config']['source'],'reference')
         self.assertEqual(self.request('/api/bot/backtest',{**body,'csv_instrument':'BTC'})[0],400)
+
+    def test_demo_is_separate_from_paper_and_never_starts_without_approval_or_keys(self):
+        before=self.request('/api/bot')[1]['state']
+        status,state=self.request('/api/demo/status');self.assertEqual(status,200);self.assertEqual(state['environment'],'demo')
+        self.assertEqual(self.request('/api/demo/start',{'versionId':'unknown'})[0],400)
+        cfg={'instrument':'XLM','source':'okx','market':'perpetual','engine':'agents','leverage':2}
+        status,version=self.request('/api/strategies/version',cfg);self.assertEqual(status,200);self.assertFalse(version['approved'])
+        self.assertEqual(self.request('/api/demo/start',{'versionId':version['id']})[0],400)
+        self.assertEqual(self.request('/api/strategies/approve',{'versionId':version['id'],'validationId':'missing','acknowledged':True})[0],400)
+        self.assertEqual(self.request('/api/demo/stop',{})[0],200)
+        self.assertEqual(self.request('/api/bot')[1]['state'],before)
+
+    def test_operations_backup_and_unconfigured_notifications_report_truthfully(self):
+        status,r=self.request('/api/ops/backup',{});self.assertEqual(status,200);self.assertTrue(r['verified'])
+        status,ops=self.request('/api/ops/status');self.assertEqual(status,200);self.assertIn(r['file'],ops['backupFiles'])
+        with patch.dict(os.environ,{'INWESTAPP_ALERT_WEBHOOK':''}):
+            status,r=self.request('/api/ops/notify-test',{});self.assertEqual(status,200);self.assertFalse(r['configured'])
+
+    def test_contract_endpoint_displays_real_spec_fields_without_keys(self):
+        from test_automation import spec_row,tier_rows
+        import contract_specs
+        spec=contract_specs.parse(spec_row(),'XLM',tier_rows())
+        with patch('contract_specs.fetch',return_value=spec):status,r=self.request('/api/contracts?instrument=XLM')
+        self.assertEqual(status,200);self.assertEqual(r['unitsPerContract'],'100');self.assertEqual(r['lotSz'],'0.1')
 
     def test_all_timeframes_in_http_keep_timestamps(self):
         for tf in ('15m','30m','1h','2h','4h','1d'):

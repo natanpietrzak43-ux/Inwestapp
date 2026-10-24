@@ -5,6 +5,7 @@ import os
 import sqlite3
 import time
 import uuid
+import execution_context
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,7 @@ from market_data import INSTRUMENTS
 
 
 def data_dir():
+    if execution_context.root.get() is not None:return Path(execution_context.root.get())
     configured=os.environ.get('INWESTAPP_DATA_DIR')
     if configured:return Path(configured).expanduser()
     if os.name=='nt':return Path(os.environ.get('LOCALAPPDATA',str(Path.home()/'AppData'/'Local')))/'Inwestapp'
@@ -22,8 +24,9 @@ def data_dir():
 
 @contextmanager
 def database():
-    root=data_dir();root.mkdir(parents=True,exist_ok=True)
+    root=data_dir();root.mkdir(parents=True,exist_ok=True,mode=0o700)
     conn=sqlite3.connect(root/'inwestapp.sqlite3',timeout=15)
+    if os.name!='nt':(root/'inwestapp.sqlite3').chmod(0o600)
     conn.row_factory=sqlite3.Row
     try:
         conn.executescript('''CREATE TABLE IF NOT EXISTS alerts(id TEXT PRIMARY KEY,instrument TEXT,direction TEXT,price REAL,enabled INTEGER,created_at TEXT,triggered_at TEXT);
@@ -37,7 +40,7 @@ CREATE TABLE IF NOT EXISTS forecasts(id TEXT PRIMARY KEY,data TEXT NOT NULL);'''
     finally:conn.close()
 
 
-def now_iso():return datetime.now(timezone.utc).isoformat()
+def now_iso():return datetime.fromtimestamp(execution_context.clock.get(),timezone.utc).isoformat() if execution_context.clock.get() is not None else datetime.now(timezone.utc).isoformat()
 def numeric(value,minimum=0,maximum=1e12):
     result=float(value)
     if not math.isfinite(result) or not minimum<=result<=maximum:raise ValueError('Liczba poza dozwolonym zakresem.')
@@ -196,6 +199,7 @@ def forecast_summary(key,horizon,quote=None):
 
 def export_data():
     with database() as conn:
-        names=('alerts','alert_events','trades','forecasts','paper_state','paper_events','paper_trades','strategy_research','agent_cycles','paper_accounts','bot_backtests')
+        names=('alerts','alert_events','trades','forecasts','paper_state','paper_events','paper_trades','strategy_research','agent_cycles','paper_accounts','bot_backtests',
+               'strategy_versions','strategy_validations','demo_state','demo_orders','demo_fills','ops_events','runtime_heartbeats')
         tables={table:[dict(r) for r in conn.execute('SELECT * FROM '+table)] for table in names if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone()}
     return {'schemaVersion':1,'exportedAt':now_iso(),'tables':tables}

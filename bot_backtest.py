@@ -21,7 +21,7 @@ NOTICE=('Sygnał z poprzedniej zamkniętej świecy, wejście na kolejnym otwarci
         'Ostatnią pozycję zamykamy na końcu testu. Wynik nie jest prognozą ani odtworzeniem rozliczeń OKX.')
 
 
-def run(rows,cfg,start_date=None,end_date=None,spread_bps=10,ledger=True):
+def research_run(rows,cfg,start_date=None,end_date=None,spread_bps=10,ledger=True):
     tf=cfg['timeframe'];bars=validate_bars(rows,tf);inds=indicators(bars)
     spread=numeric(spread_bps,0,200)/10000;slip=cfg['slippage']/10000
     def bound(value):
@@ -97,3 +97,12 @@ def run(rows,cfg,start_date=None,end_date=None,spread_bps=10,ledger=True):
             'bars':len(indices),'warmupBars':200,'equity':curve if ledger else [],'trades':trades if ledger else [],
             'blockedEntries':blocked[-200:] if ledger else [],'blockedCount':len(blocked),'spreadBps':spread*10000,
             'historicalGuardReplayed':False,'liquidationModel':'isolated_constant_mmr_ohlc_proxy','notice':NOTICE}
+
+
+def run(rows,cfg,start_date=None,end_date=None,spread_bps=10,ledger=True,engine='full',market_bundle=None):
+    if engine=='rules':
+        if market_bundle is not None:raise ValueError('Dane kontraktowe wymagają pełnego silnika testów.')
+        return research_run(rows,cfg,start_date,end_date,spread_bps,ledger)
+    if engine!='full':raise ValueError('Wybierz pełny silnik lub badanie samych reguł.')
+    from shared_replay import run as replay
+    return replay(rows,cfg,start_date,end_date,spread_bps,ledger,bundle=market_bundle)

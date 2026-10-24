@@ -167,7 +167,7 @@ class BotReplayTests(unittest.TestCase):
         rows=bars or self.bars
         def signal(bar,ind,cfg):return {'action':side if bar['date']==rows[199]['date'] else 'WAIT'}
         with patch('bot_backtest.indicators',return_value=self.inds),patch('bot_backtest.model.signal',side_effect=signal):
-            return bot_backtest.run(rows,cfg or config(costs=10,slippage=10,funding_bps=0),spread_bps=0,**extra)
+            return bot_backtest.research_run(rows,cfg or config(costs=10,slippage=10,funding_bps=0),spread_bps=0,**extra)
 
     def test_replay_fills_next_open_with_both_fees_and_slippage_and_force_closes(self):
         r=self.run_replay();self.assertEqual(r['metrics']['closedTrades'],1);t=r['trades'][0]
@@ -197,9 +197,9 @@ class BotReplayTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.run_replay(**dates)
 
     def test_insufficient_history_and_excessive_spread_fail_or_block(self):
-        with self.assertRaises(ValueError):bot_backtest.run(self.bars[:200],config())
+        with self.assertRaises(ValueError):bot_backtest.research_run(self.bars[:200],config())
         with patch('bot_backtest.indicators',return_value=self.inds),patch('bot_backtest.model.signal',return_value={'action':'LONG'}):
-            r=bot_backtest.run(self.bars,config(max_spread=1),spread_bps=10)
+            r=bot_backtest.research_run(self.bars,config(max_spread=1),spread_bps=10)
         self.assertEqual(r['metrics']['closedTrades'],0);self.assertGreater(r['blockedCount'],0)
 
     def test_daily_loss_resets_on_next_utc_day_but_drawdown_never_resets_in_replay(self):
@@ -207,8 +207,8 @@ class BotReplayTests(unittest.TestCase):
         zero=datetime(2026,9,1,tzinfo=timezone.utc)
         rows=[{**b,'date':(zero+timedelta(hours=i-200)).isoformat(),'low':97.} for i,b in enumerate(self.bars)]
         with patch('bot_backtest.indicators',return_value=self.inds),patch('bot_backtest.model.signal',return_value={'action':'LONG'}):
-            daily=bot_backtest.run(rows,config(costs=0,slippage=0,funding_bps=0,daily_loss=.5,max_drawdown=50),spread_bps=0)
-            drawdown=bot_backtest.run(rows,config(costs=0,slippage=0,funding_bps=0,daily_loss=20,max_drawdown=1),spread_bps=0)
+            daily=bot_backtest.research_run(rows,config(costs=0,slippage=0,funding_bps=0,daily_loss=.5,max_drawdown=50),spread_bps=0)
+            drawdown=bot_backtest.research_run(rows,config(costs=0,slippage=0,funding_bps=0,daily_loss=20,max_drawdown=1),spread_bps=0)
         self.assertEqual(daily['metrics']['closedTrades'],2)
         self.assertEqual(drawdown['metrics']['closedTrades'],1)
 
@@ -216,5 +216,5 @@ class BotReplayTests(unittest.TestCase):
         rows=demo_bars('XLM','1h');changed=copy.deepcopy(rows);cut=750
         for b in changed[cut:]:
             for k in ('open','high','low','close'):b[k]*=1.8
-        first=bot_backtest.run(rows,config());second=bot_backtest.run(changed,config())
+        first=bot_backtest.research_run(rows,config());second=bot_backtest.research_run(changed,config())
         self.assertEqual(first['equity'][:cut-200],second['equity'][:cut-200])

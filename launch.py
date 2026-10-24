@@ -15,7 +15,7 @@ from app_release import APP_VERSION, FEATURES, STATIC_PATHS
 from local_server import port_busy, report_bind_error
 
 ROOT = Path(__file__).resolve().parent
-REQUIRED = ('server.py','app_release.py','local_server.py','leveraged_trading.py','futures_bot.py','bot_backtest.py','strategy_sources.py','analysis_engine.py','market_data.py','paper_bot.py',
+REQUIRED = ('notification_channel.py','decision_engine.py','shared_replay.py','execution_context.py','contract_specs.py','replay_market.py','runtime_ops.py','strategy_registry.py','strategy_validation.py','okx_demo.py','secure_store.py','demo_stream.py','demo_executor.py','server.py','app_release.py','local_server.py','leveraged_trading.py','futures_bot.py','bot_backtest.py','strategy_sources.py','analysis_engine.py','market_data.py','paper_bot.py',
             'agent_pipeline.py','okx_data.py','technical_tools.py','custom_indicators.py',
             'timeframes.py','user_data.py','news_data.py','strategy_lab.py','trader_mcp.py')
 
@@ -60,7 +60,7 @@ def run_server(port):
         # finish its own shutdown instead of printing a launcher traceback.
         print('\nZatrzymywanie aplikacji...',flush=True)
         try:
-            return child.wait(timeout=10)
+            return child.wait(timeout=50)
         except (subprocess.TimeoutExpired,KeyboardInterrupt):
             child.terminate()
             try:return child.wait(timeout=5)

@@ -63,10 +63,11 @@ function syncTradingForm(form){
  for(const label of form.querySelectorAll('.contract-only')){label.hidden=!futures;for(const input of label.querySelectorAll('input,select'))input.disabled=!futures;}
  form.querySelector('.exposure-label').textContent=futures?'Maks. depozyt · % kapitału':'Maks. ekspozycja · % kapitału';
  if(field(form,'mode')){const csv=field(form,'mode').querySelector('[value="csv"]');if(csv)csv.disabled=futures;if(futures&&field(form,'mode').value==='csv')field(form,'mode').value='live';}
+ const marketData=field(form,'market_data');if(marketData){const allowed=futures&&field(form,'mode').value==='live'&&field(form,'execution_model').value==='full';marketData.querySelector('[value="contract"]').disabled=!allowed;if(!allowed)marketData.value='assumptions';}
 }
 field($('bot-form'),'market').onchange=syncBotCurrency;
 function syncReplay(){const form=$('replay-form');syncTradingForm(form);const unit=field(form,'source').value==='okx'?'USDT':'USD';form.querySelector('.replay-currency').textContent=unit;syncAssetUnits(form,unit);}
-for(const name of ['market','source','mode'])field($('replay-form'),name).onchange=syncReplay;
+for(const name of ['market','source','mode','execution_model'])field($('replay-form'),name).onchange=syncReplay;
 $('replay-copy').onclick=async()=>{await loadBotPresets();for(const[k,v]of Object.entries(formBody($('bot-form')))){const input=field($('replay-form'),k);if(input)input.value=v;}syncReplay();message($('replay-form'),'Skopiowano ustawienia formularza bota. Test nie uruchomi ani nie zmieni konta.');};
 let replayReport=null;
 $('replay-form').onsubmit=e=>{e.preventDefault();submit(e.target,async()=>{const body=formBody(e.target);if(body.mode==='csv'){if(!importCsv||data?.mode!=='csv')throw Error('Najpierw poprawnie zaimportuj CSV w Przeglądzie rynku.');if(data.instrument.id!==body.instrument||data.timeframe!==body.timeframe)throw Error('Wybierz instrument i interwał zgodny z importem CSV.');body.csv=importCsv;body.csv_instrument=data.instrument.id;body.csv_timeframe=data.timeframe;}text('replay-state','Pobieranie zamkniętych świec i symulacja wybranego modelu…');const r=await api('/api/bot/backtest',body);renderReplay(r);await loadReplayHistory();message(e.target,'Raport zapisano. Konto bota pozostało bez zmian.');});};
@@ -78,7 +79,7 @@ function renderReplay(r){
  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 800 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Krzywa kapitału wybranej symulacji');
  const data=r.equity,low=Math.min(r.config.capital,...data.map(p=>p.value)),high=Math.max(r.config.capital,...data.map(p=>p.value)),span=high-low||1;
  const line=document.createElementNS(ns,'polyline'),step=Math.max(1,Math.floor(data.length/1000)),sample=data.filter((_,i)=>i%step===0||i===data.length-1);
- line.setAttribute('points',sample.map(p=>`${40+(data.indexOf(p)/Math.max(1,data.length-1))*740},${190-(p.value-low)/span*170}`).join(' '));line.setAttribute('fill','none');line.setAttribute('stroke','#1666d8');line.setAttribute('stroke-width','2');svg.append(line);chart.append(svg,element('p',`${amount(low)} – ${amount(high)} · pełna krzywa i transakcje w raporcie JSON.`,'fine'));
+ line.setAttribute('points',sample.map(p=>`${40+(data.indexOf(p)/Math.max(1,data.length-1))*740},${high===low?105:190-(p.value-low)/span*170}`).join(' '));line.setAttribute('fill','none');line.setAttribute('stroke','#1666d8');line.setAttribute('stroke-width','2');svg.append(line);chart.append(svg,element('p',`${amount(low)} – ${amount(high)} · pełna krzywa i transakcje w raporcie JSON.`,'fine'));
  $('replay-trades').replaceChildren(...r.trades.slice(-200).reverse().map(t=>{const tr=element('tr');for(const v of [t.direction+' '+t.leverage+'×',displayDate(t.entryDate),displayDate(t.exitDate),amount(t.pnl),t.reason])tr.append(element('td',v));return tr;}));
  if(!r.trades.length){const row=element('tr'),cell=element('td','Brak transakcji spełniających warunki w tym okresie.');cell.colSpan=5;row.append(cell);$('replay-trades').append(row);}
  $('replay-download').disabled=false;

@@ -12,6 +12,11 @@ import strategy_lab
 import okx_data
 import bot_backtest
 import strategy_sources
+import runtime_ops
+import strategy_registry
+import strategy_validation
+import demo_executor
+import replay_market
 import user_data
 from news_data import get_news
 import math
@@ -129,6 +134,16 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/health':
             return self.send_json({'status': 'ok', 'version': APP_VERSION, 'instruments': list(INSTRUMENTS), 'features': FEATURES})
+        if parsed.path in ('/api/ops/status','/api/demo/status','/api/strategies/versions','/api/contracts'):
+            try:
+                if parsed.path=='/api/ops/status':return self.send_json(runtime_ops.status())
+                if parsed.path=='/api/demo/status':return self.send_json(demo_executor.status())
+                if parsed.path=='/api/strategies/versions':return self.send_json(strategy_registry.records())
+                import contract_specs
+                key=urllib.parse.parse_qs(parsed.query).get('instrument',['XLM'])[0]
+                return self.send_json(contract_specs.fetch(key))
+            except ValueError as error:return self.send_json({'error':str(error)},400)
+            except OSError:return self.send_json({'error':'Brak potwierdzenia danych od dostawcy.'},502)
         if parsed.path=='/api/catalog':
             return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False},
                                    'botMarkets':{'spot':{'paperOnly':True,'leverageMax':1},'perpetual':{'paperOnly':True,'source':'okx','instruments':list(okx_data.SYMBOLS),'leverageMin':1,'leverageMax':10,'margin':'isolated_simulation'}}})
@@ -230,6 +245,32 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<length<=9_000_000:raise ValueError('Żądanie może mieć maksymalnie 9 MB.')
             body=json.loads(self.rfile.read(length))
             if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
+            if method=='POST' and self.path in ('/api/demo/start','/api/demo/stop','/api/demo/close','/api/demo/check','/api/ops/backup',
+                                                '/api/ops/notify-test','/api/strategies/version','/api/strategies/validate','/api/strategies/approve','/api/strategies/revoke'):
+                if self.path=='/api/demo/start':return self.send_json(demo_executor.start(body.get('versionId')))
+                if self.path=='/api/demo/stop':return self.send_json(demo_executor.stop())
+                if self.path=='/api/demo/close':return self.send_json(demo_executor.stop(True))
+                if self.path=='/api/demo/check':
+                    cfg=paper_bot.configuration(body)
+                    if not demo_executor.okx_demo.configured():raise ValueError('Brak kluczy OKX Demo. Skonfiguruj je prywatnym narzędziem poza czatem.')
+                    snapshot=demo_executor.Executor().snapshot(cfg)
+                    return self.send_json({'environment':'demo','connected':True,'equityUSDT':snapshot['equity'],'positions':len(snapshot['positions']),'pendingOrders':len(snapshot['pending'])})
+                if self.path=='/api/ops/backup':return self.send_json(runtime_ops.backup())
+                if self.path=='/api/ops/notify-test':
+                    runtime_ops.event('notification_test','Test powiadomienia operacyjnego z aplikacji.')
+                    runtime_ops.notify_pending();return self.send_json({'configured':runtime_ops.status()['notificationConfigured']})
+                if self.path=='/api/strategies/approve':return self.send_json(strategy_registry.approve(body.get('versionId'),body.get('validationId'),body.get('acknowledged')))
+                if self.path=='/api/strategies/revoke':return self.send_json(strategy_registry.revoke(body.get('versionId')))
+                cfg=paper_bot.configuration(body)
+                if self.path=='/api/strategies/version':return self.send_json(strategy_registry.register(cfg))
+                if cfg['market']!='perpetual' or cfg['source']!='okx':raise ValueError('Dopuszczenie OKX Demo dotyczy obecnie USDT perpetual.')
+                try:
+                    bars,_=okx_data.candles(cfg['instrument'],cfg['timeframe'],'perpetual')
+                    days=user_data.numeric(body.get('validation_days',60),7,180)
+                    bars=bars[-min(5000,int(days*86400/TIMEFRAMES[cfg['timeframe']]['seconds'])+400):]
+                    bundle=replay_market.fetch(bars,cfg)
+                except OSError:return self.send_json({'error':'Nie pobrano pełnych danych kontraktowych do walidacji.'},502)
+                return self.send_json(strategy_registry.save_validation(strategy_validation.validate(bars,cfg,bundle)))
             if method=='POST' and self.path in ('/api/bot/start','/api/bot/account','/api/bot/stop','/api/bot/close','/api/bot/backtest','/api/strategies/source','/api/strategies/test','/api/mcp/research'):
                 if self.path=='/api/bot/start':return self.send_json(paper_bot.start(body))
                 if self.path=='/api/bot/account':return self.send_json(paper_bot.start(body,new_account=True))
@@ -251,7 +292,11 @@ class Handler(BaseHTTPRequestHandler):
                         if body.get('csv_instrument')!=key or body.get('csv_timeframe')!=tf:raise ValueError('Instrument i interwał testu muszą zgadzać się z importem CSV.')
                         bars=list(csv.DictReader(io.StringIO(body['csv'].lstrip('\ufeff'))))
                     else:raise ValueError('Wybierz historię dostawcy lub demonstrację; CSV tylko dla spot.')
-                    report=bot_backtest.run(bars,config,body.get('start_date'),body.get('end_date'),body.get('spread_bps',10))
+                    bundle=None
+                    if body.get('market_data')=='contract':
+                        if mode!='live' or config['market']!='perpetual':raise ValueError('Dane kontraktowe wymagają historii OKX perpetual.')
+                        bundle=replay_market.fetch(bars,config,body.get('start_date'),body.get('end_date'))
+                    report=bot_backtest.run(bars,config,body.get('start_date'),body.get('end_date'),body.get('spread_bps',10),engine=body.get('execution_model','full'),market_bundle=bundle)
                     report.update(instrument=key,market=config['market'],mode=mode,currency=config['currency'],source=config['source'] if mode=='live' else mode,demo=mode=='demo')
                     return self.send_json(paper_bot.save_backtest(report))
                 mode=body.get('mode','live');config=paper_bot.configuration(body if mode=='live' else {**body,'source':'reference'});key=config['instrument'];tf=config['timeframe']
@@ -300,6 +345,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--open-browser', action='store_true', help='Otwórz aplikację w przeglądarce po uruchomieniu.')
     args = parser.parse_args()
+    if args.host not in ('127.0.0.1','localhost'):parser.error('Panel wykonawczy działa wyłącznie lokalnie. Do dostępu zdalnego użyj prywatnego tunelu SSH/VPN do localhost.')
     try:
         server = LocalHTTPServer((args.host, args.port), Handler)
     except OSError as error:
@@ -307,16 +353,17 @@ if __name__ == '__main__':
         raise SystemExit(3)
     def bot_analysis(config):
         key=config['instrument'];tf=config['timeframe'];preset=PRESETS[config['preset']]
-        if config['market']=='perpetual':
-            from analysis_engine import indicators
-            bars,fetched=okx_data.candles(key,tf,'perpetual')
-            report=bot_backtest.run(bars,config,ledger=False)
-            return {'bars':bars,'indicators':indicators(bars),'historyGuard':report['historyGuard'],'lastDate':bars[-1]['date'],
-                    'instrument':{'id':key},'timeframe':tf,'source':'okx','currency':'USDT','market':'perpetual','mode':'live','stale':False,'fetchedAt':fetched}
-        bars,fetched=fetch_bars(key,tf,config['source'])
-        return package(key,bars,'live',config['capital'],config['risk'],config['costs'],fetched,tf,preset['tools'],preset['strategy'],config['slippage'],source=config['source'])
+        from analysis_engine import indicators
+        import decision_engine
+        bars,fetched=okx_data.candles(key,tf,'perpetual') if config['market']=='perpetual' else fetch_bars(key,tf,config['source'])
+        result=decision_engine.analysis(bars,indicators(bars),config,time.time())
+        result['fetchedAt']=fetched
+        return result
     bot_service=paper_bot.Service(lambda key,source:get_quotes([key],source=source)['quotes'][0],bot_analysis)
-    bot_service.start()
+    try:bot_service.start()
+    except ValueError as error:server.server_close();print(str(error),flush=True);raise SystemExit(4)
+    demo_service=demo_executor.Service(bot_analysis);demo_service.start()
+    supervisor=runtime_ops.Supervisor();supervisor.start()
     url = f'http://{args.host}:{args.port}'
     print(f'Inwestapp {APP_VERSION}: {url}', flush=True)
     if args.open_browser:
@@ -326,5 +373,9 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print('\nSerwer zatrzymany.', flush=True)
     finally:
-        bot_service.stop()
+        demo_service.stop()
+        supervisor.stop()
+        # Keep the process-wide lease until process exit: another daemon may
+        # still be unwinding a transport timeout during bounded shutdown.
+        bot_service.stop(release=False)
         server.server_close()

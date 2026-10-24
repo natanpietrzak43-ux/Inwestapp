@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Inwestapp v1.8.0
+echo Inwestapp v2.0.0
 echo Pozostaw to okno otwarte podczas korzystania z aplikacji.
 echo Domyslny adres w przegladarce: http://127.0.0.1:8000
 echo.

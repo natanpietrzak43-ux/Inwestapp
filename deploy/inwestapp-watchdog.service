@@ -1,0 +1,10 @@
+[Unit]
+Description=Independent Inwestapp heartbeat check
+
+[Service]
+Type=oneshot
+User=inwestapp
+Environment=INWESTAPP_DATA_DIR=/var/lib/inwestapp
+EnvironmentFile=-/etc/inwestapp/demo.env
+ExecStart=/usr/bin/python3 /opt/inwestapp/tools/watchdog.py --once
+UMask=0077

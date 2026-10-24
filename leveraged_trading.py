@@ -4,6 +4,7 @@ Base-asset units, constant user-assumed funding and maintenance margin. This is
 an explicit simulation model, not the OKX tiered liquidation/order engine.
 """
 import math
+import execution_context
 from technical_tools import PRESETS, combined_decision
 from user_data import numeric
 
@@ -34,7 +35,7 @@ def signal(bar,ind,cfg):
 
 
 def liquidation_price(p,cfg):
-    reserve=cfg['maintenance_margin']/100+cfg['costs']/10000
+    reserve=p.get('maintenanceMargin',cfg['maintenance_margin']/100)+cfg['costs']/10000
     collateral=p['margin']-p.get('funding',0)
     side=p['side']
     return max(0,(p['entry']-side*collateral/p['units'])/(1-side*reserve))
@@ -42,6 +43,9 @@ def liquidation_price(p,cfg):
 
 def plan(cfg,cash,equity,entry,atr,side,now=0):
     if side not in (1,-1) or not all(math.isfinite(v) and v>0 for v in (cash,equity,entry,atr)):return None
+    # The approved allocation is a hard sizing ceiling. Profits or an external
+    # balance increase cannot silently authorize a larger risk budget.
+    equity=min(equity,cfg['capital'])
     fee=cfg['costs']/10000;slip=cfg['slippage']/10000
     stop=entry-side*2*atr;target=entry+side*3*atr
     if min(stop,target)<=0:return None
@@ -55,13 +59,22 @@ def plan(cfg,cash,equity,entry,atr,side,now=0):
             'leverage':leverage,'riskBudget':equity*cfg['risk']/100,'estimatedStopLoss':per_unit*units,'lastFundingAt':now}
     result['liquidationPrice']=liquidation_price(result,cfg) if cfg['market']=='perpetual' else None
     if cfg['market']=='perpetual' and side*(stop_fill-result['liquidationPrice'])<=0:return None
+    bundle=execution_context.market_data.get()
+    if bundle and cfg['market']=='perpetual':
+        from contract_specs import round_plan
+        try:return round_plan(result,cfg,bundle['spec'])
+        except ValueError:return None
     return result
 
 
 def funding(p,mark,now,cfg):
     if cfg['market']!='perpetual':return
-    periods=max(0,int(now//28800)-int(p['lastFundingAt']//28800))
-    p['funding']+=periods*p['side']*p['units']*mark*cfg['funding_bps']/10000
+    bundle=execution_context.market_data.get()
+    if bundle:
+        p['funding']+=sum(p['side']*p['units']*r['markPrice']*r['rate'] for r in bundle['funding'] if p['lastFundingAt']<r['timestamp']<=now)
+    else:
+        periods=max(0,int(now//28800)-int(p['lastFundingAt']//28800))
+        p['funding']+=periods*p['side']*p['units']*mark*cfg['funding_bps']/10000
     p['lastFundingAt']=max(p['lastFundingAt'],now)
     p['liquidationPrice']=liquidation_price(p,cfg)
 

@@ -1,0 +1,2 @@
+# Optional private OKX Demo event stream. Core app and REST fallback use stdlib.
+websockets==16.0

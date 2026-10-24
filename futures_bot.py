@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime,timezone
 import agent_pipeline
 import leveraged_trading as model
+from decision_engine import risk_halt
 
 
 def advance(conn,state,quote,analysis,now,analysis_error,event):
@@ -36,7 +37,7 @@ def advance(conn,state,quote,analysis,now,analysis_error,event):
         state['peakEquity']=max(state.get('peakEquity',equity),equity)
         if p and model.liquidated(p,mark,cfg):close('Likwidacja modelowa — utrata depozytu izolowanego',True)
         equity=model.value(state['cash'],p,mark,cfg)
-        halted='drawdown' if equity<=state['peakEquity']*(1-cfg['max_drawdown']/100) else 'daily' if equity<=state['dayEquity']*(1-cfg['daily_loss']/100) else None
+        halted=risk_halt(equity,state['peakEquity'],state['dayEquity'],cfg)
         if halted:
             state.update(active=False,pending=None,riskHalted=halted)
             if p:close('Limit obsunięcia' if halted=='drawdown' else 'Limit straty dnia UTC')
@@ -44,30 +45,11 @@ def advance(conn,state,quote,analysis,now,analysis_error,event):
             executable=quote['bid'] if p['side']==1 else quote['ask']
             if p['side']*(executable-p['stop'])<=0:close('Stop loss — pierwsza zaobserwowana cena')
             elif p['side']*(executable-p['target'])>=0:close('Take profit — pierwsza zaobserwowana cena')
-    check,rows=agent_pipeline.quality(analysis,quote,cfg,now)
-    if not valid:check['reasons'].append('Brak świeżego ticker i mark price kontraktu perpetual.')
-    elif abs(quote['markPrice']/quote['price']-1)*100>cfg['max_deviation']:check['reasons'].append('Mark price odchyla się od ceny transakcyjnej ponad limit.')
-    if check['reasons']:check['status']='blocked'
-    technical=None
-    if check['status']=='passed':
-        try:technical=model.signal(rows[-1],analysis['indicators'][-1],cfg)
-        except (KeyError,IndexError,ValueError,TypeError):check['reasons'].append('Niepoprawne odczyty wskaźników futures.');check['status']='blocked'
-    action=technical['action'] if technical else 'WAIT';reason=technical['reason'] if technical else 'Kontrola jakości blokuje analizę.'
-    if p:action='CLOSE' if (action=='LONG' and p['side']==-1) or (action=='SHORT' and p['side']==1) else 'WAIT'
-    reasons=list(check['reasons']);candle=check['lastCandle'];cycle['candle']=candle
-    if action in ('LONG','SHORT'):
-        side=1 if action=='LONG' else -1
-        if not state['active'] or state.get('riskHalted'):reasons.append('Nowe wejścia zatrzymane przez użytkownika lub limit ryzyka.')
-        if cfg['direction'] not in ('both','long' if side==1 else 'short'):reasons.append('Ten kierunek wejścia jest wyłączony.')
-        if not analysis.get('historyGuard',{}).get('passed'):reasons.append('Historyczny test modelu futures nie przeszedł minimalnego filtra.')
-        if candle==state.get('lastExitCandle'):reasons.append('Po wyjściu czekamy na następną zamkniętą świecę.')
-        if valid and (quote['ask']-quote['bid'])/((quote['ask']+quote['bid'])/2)*10000>cfg['max_spread']:reasons.append('Spread przekracza limit wejścia.')
-        if not reasons:
-            fill=(quote['ask'] if side==1 else quote['bid'])*(1+side*cfg['slippage']/10000)
-            plan=model.plan(cfg,state['cash'],state['lastEquity'] if not valid else model.value(state['cash'],p,quote['markPrice'],cfg),fill,analysis['indicators'][-1]['atr'],side,now)
-            if not plan:reasons.append('Brak depozytu albo stop leży za modelowym poziomem likwidacji.')
-    elif action=='WAIT':reasons.append(reason)
-    final=action if not reasons else 'WAIT'
+    from decision_engine import perpetual_entry
+    decision=perpetual_entry(analysis,quote,cfg,state,now,valid)
+    check=decision['quality'];technical=decision['technical'];action=decision['proposal']
+    reason=decision['reason'];reasons=decision['reasons'];plan=decision['plan'];candle=decision['candle'];final=decision['action']
+    cycle['candle']=candle
     cycle['stages']=[{'id':'data','name':'Dane kontraktu OKX','status':'received' if valid else 'blocked','reasons':[quote.get('sourceSymbol','Brak kontraktu')]},check]
     for group,label in [('trend','Trend'),('momentum','Momentum'),('volume','Wolumen'),('regime','Reżim'),('context','Kontekst')]:
         readings=[r for r in technical['checks'] if r['group']==group] if technical else []

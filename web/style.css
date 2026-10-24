@@ -33,3 +33,5 @@
 .update-status{margin:0 0 18px}.update-status strong{font-size:12px}.update-status p{margin:7px 0;line-height:1.8}.update-status .fine{margin-bottom:0;color:#617a6e}.update-status.warning .fine{color:#8c724b}@media(max-width:800px){.update-status .button{white-space:normal;text-align:left}}
 
 #replay-chart svg{display:block;width:100%;height:auto;max-height:300px}
+
+.sidebar{overflow-y:auto}#automation .entry-actions{flex-wrap:wrap}#automation .entry-actions .button{white-space:normal}#automation-config{overflow-wrap:anywhere}

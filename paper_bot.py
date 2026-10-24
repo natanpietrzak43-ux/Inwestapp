@@ -310,7 +310,10 @@ class Service:
         if not self.shutdown.is_set():advance(state['run_id'],q,analysis,analysis_error=analysis_error)
     def run(self):
         while not self.shutdown.is_set():
-            try:self.pulse()
+            try:
+                import runtime_ops
+                runtime_ops.heartbeat('paper-worker',{'status':'running'})
+                self.pulse()
             except Exception:
                 # Do not log provider URLs/credentials or invent successful executions.
                 try:
@@ -319,8 +322,14 @@ class Service:
                         if s:s['status']='Błąd cyklu bota; brak potwierdzenia wykonania. Sprawdź dane i bazę.';s['lastHeartbeat']=now_iso();_save(conn,s)
                 except Exception:pass
             self.shutdown.wait(15)
-    def start(self):self.background=True;self.thread=threading.Thread(target=self.run,daemon=True);self.thread.start()
-    def stop(self):self.shutdown.set();self.thread.join(timeout=2)
+    def start(self):
+        from runtime_ops import WorkerLease
+        self.lease=WorkerLease().acquire()
+        self.background=True;self.thread=threading.Thread(target=self.run,daemon=True);self.thread.start()
+    def stop(self,release=True):
+        self.shutdown.set()
+        if self.thread:self.thread.join(timeout=15)
+        if release and hasattr(self,'lease') and (not self.thread or not self.thread.is_alive()):self.lease.close()
 
 
 def save_research(record):

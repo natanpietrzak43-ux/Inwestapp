@@ -1,0 +1,23 @@
+[Unit]
+Description=Inwestapp private paper and OKX Demo service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=inwestapp
+WorkingDirectory=/opt/inwestapp
+Environment=INWESTAPP_DATA_DIR=/var/lib/inwestapp
+EnvironmentFile=-/etc/inwestapp/demo.env
+ExecStart=/usr/bin/python3 /opt/inwestapp/server.py --port 8000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/inwestapp
+
+[Install]
+WantedBy=multi-user.target

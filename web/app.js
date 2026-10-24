@@ -19,12 +19,12 @@ function renderInstruments(){
  }));
 }
 function setTab(next){
- tab=next;const extra=['alerts','news','journal','analysts','bot'].includes(next);
+ tab=next;const extra=['alerts','news','journal','analysts','bot','automation'].includes(next);
  document.querySelectorAll('.tab-panel,.workspace-panel').forEach(e=>e.hidden=e.id!==next);
  $('dashboard').hidden=extra||!data;
  for(const selector of ['.controls','.tools-panel','#notice','#error','#loading','#refresh']){const el=document.querySelector(selector);if(el){if(extra)el.setAttribute('data-workspace-hidden','');else el.removeAttribute('data-workspace-hidden');}}
  document.querySelectorAll('.nav').forEach(e=>{e.classList.toggle('active',e.dataset.tab===next);e.setAttribute('aria-pressed',e.dataset.tab===next);});
- text('breadcrumb',{analysis:'Przegląd rynku',backtest:'Test strategii',method:'Metodologia',alerts:'Alerty cenowe',news:'Wiadomości',journal:'Dziennik transakcji',analysts:'Prognozy analityków',bot:'Bot i strategie'}[next]);
+ text('breadcrumb',{analysis:'Przegląd rynku',backtest:'Test strategii',method:'Metodologia',alerts:'Alerty cenowe',news:'Wiadomości',journal:'Dziennik transakcji',analysts:'Prognozy analityków',bot:'Bot i strategie',automation:'Centrum automatyzacji'}[next]);
  if(window.workspaceTabChanged)window.workspaceTabChanged(next);
 }
 document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
@@ -198,7 +198,7 @@ function choosePreset(name){const p=catalog.presets[name];if(!p)return;document.
 async function initialize(){
  createQuoteCards();renderInstruments();
  try{
-  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 1.8.0 z nowego folderu.');catalog=await response.json();
+  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 2.0.0 z nowego folderu.');catalog=await response.json();
   let saved={};try{const value=JSON.parse(localStorage.getItem('inwestapp.settings')||'{}');saved=value&&typeof value==='object'?value:{};}catch{}
   const chosen=Array.isArray(saved.tools)?saved.tools.filter(t=>catalog.tools[t]):catalog.presets.balanced.tools;
   if(['trend','range'].includes(saved.strategy))$('strategy').value=saved.strategy;if(catalog.timeframes[saved.timeframe])$('timeframe').value=saved.timeframe;
