@@ -1,6 +1,25 @@
-# Inwestapp 2.0.0
+# Inwestapp 2.1.0
 
-Prywatny warsztat analizy XRP, XLM, BTC, ETH i referencyjnych cen surowców. Bot papierowy oraz osobny wykonawca **OKX Demo**. **Brak trybu handlu prawdziwymi środkami.**
+Prywatny warsztat analizy 16 kryptowalut i referencyjnych cen surowców. Bot papierowy oraz osobny wykonawca **OKX Demo**. **Brak trybu handlu prawdziwymi środkami.**
+
+
+## Aktualizacja 2.1.0 — zabezpieczenia i więcej kryptowalut
+
+Cały projekt zawiera teraz lokalną ochronę API: token operacji, kontrolę adresu/portu/źródła żądań, blokadę żądań z obcych stron, CSP przeciw wykonywaniu wstrzykniętych skryptów i osadzaniu panelu w ramkach, limity połączeń i kosztownych analiz, ograniczenia rozmiaru danych i sprawdzanie zgodności plików przed uruchomieniem. Źródła danych korzystają z zamkniętej listy hostów HTTPS, weryfikują TLS i odrzucają przekierowania. Importowane strategie pozostają tekstem. To zabezpieczenia aplikacji, **nie antywirus ani gwarancja odporności na wszystkie ataki**. Szczegóły i granice: [SECURITY.md](SECURITY.md).
+
+Dodano **SOL, DOGE, ADA, LINK, AVAX, DOT, LTC, BCH, UNI, ATOM, NEAR i SUI**. Łącznie 16 kryptowalut oraz dotychczasowe srebro, ropa i złoto. Katalog jest wspólny dla analizy, historii, testów, alertów USD, dziennika, wiadomości i konfiguracji bota. Coinbase/Yahoo pozostają źródłami USD, OKX źródłem USDT. Rejestracja pary w katalogu nie potwierdza jej aktualnego notowania ani dostępności na konkretnym koncie. Brak poprawnych danych, aktywnej specyfikacji kontraktu lub walidacji blokuje właściwą analizę/wykonanie; nie podstawiamy innej pary. Dzisiejsza kontrola publicznych OKX/Coinbase w chmurze zatrzymała się na blokadzie proxy HTTP403, więc nowych par nie oznaczamy jako zweryfikowanych na żywo.
+
+**Instalacja aktualizacji na Windows:**
+
+1. Zatrzymaj poprzedni serwer i nadzór przez Ctrl+C. Zachowaj prywatną kopię folderu danych: na Windows domyślnie `%LOCALAPPDATA%\Inwestapp`, na Linux `.data`, albo ścieżka ustawiona w `INWESTAPP_DATA_DIR`.
+2. Rozpakuj cały nowy ZIP do świeżego folderu. Domyślny folder danych Windows pozostaje na miejscu i nowa wersja użyje go automatycznie. W przypadku własnej ścieżki zachowaj to samo ustawienie; na Linux po zatrzymaniu procesów przenieś wyłącznie folder danych. Nie mieszaj plików aplikacji z różnych wydań. Klucze DPAPI wymagają tego samego użytkownika Windows.
+3. Opcjonalnie uruchom **Skanuj-Defender.bat** albo skan folderu własnym antywirusem. Skrypt korzysta z istniejącego Microsoft Defender, nie instaluje programów, nie wyłącza ochrony, nie dodaje wyjątków i nie omija zasad PowerShell. Wynik sprawdź w Historii ochrony Windows; samo uruchomienie skryptu nie dowodzi zakończenia skanu bez zagrożeń.
+4. Uruchom **Sprawdz-bezpieczenstwo.bat**. Niezgodność sum plików lub brak manifestu blokuje start; pobierz pełny ZIP ponownie. Manifest sprawdza zgodność paczki, nie podpis wydawcy. Nie regeneruj go, aby ukryć błąd.
+5. Uruchom **Uruchom.bat** lub **Uruchom-z-nadzorem.bat**, sprawdź wersję **2.1.0** i odśwież Ctrl+F5. W Centrum automatyzacji jest nowa karta stanu zabezpieczeń. Zmiana kodu unieważnia dopuszczenie poprzedniej strategii — zapisz nową wersję i przeprowadź walidację przed Demo.
+
+Panel jest dostępny tylko na tym komputerze, bez logowania innych użytkowników. Nie przekierowuj jego portu w routerze. Korzystaj z aktualnego antywirusa i wspieranego Windows; na Windows 10 potrzebne są aktywne poprawki ESU lub przejście na wspierany system. Kluczy API nie przesyłaj do czatu. Tryb rzeczywistych środków nadal nie jest dostępny.
+
+**Dla twórców i integracji:** po przeglądzie zmian odtwórz manifest poleceniem `python tools/build_release_manifest.py`, a następnie wykonaj testy. Nie generuj manifestu automatycznie podczas startu ani w CI: to zamaskowałoby zmienione pliki. Lokalne klienty zapisujące przez API pobierają token z `GET /api/session` z nagłówkiem `X-Inwestapp-Client: browser`, a następnie przekazują go w `X-Inwestapp-Token`. Token zmienia się po restarcie i nie jest hasłem użytkownika.
 
 ## Wersja 2.0 — sześć obszarów automatyzacji
 
@@ -11,7 +30,7 @@ Prywatny warsztat analizy XRP, XLM, BTC, ETH i referencyjnych cen surowców. Bot
 5. **Praca i odzyskiwanie:** jedna blokada wykonawcy na bazę, niezależny od przeglądarki serwer, nadzorca restartów, heartbeat/watchdog, kolejka alarmów SMTP/HTTPS, kopia SQLite co 24 h podczas pracy i sprawdzanie integralności, narzędzie odtwarzania zachowujące poprzednią bazę. Windows: skrypty nadzoru i dwa zadania po zalogowaniu. Szablony systemd są opcją na późniejszy Linux/VPS.
 6. **Kontrola strategii:** zamrożona konfiguracja i hash kodu uruchomionego procesu, trzy późniejsze niezależne portfele i test zwiększonych kosztów, zapis raportów/proweniencji, ręczne zatwierdzenie wyłącznie Demo, cofnięcie i wygaśnięcie po 30 dniach. Zmiana kodu podczas pracy wymaga restartu i ponownej walidacji. Negatywnego wyniku nie da się obejść przyciskiem zatwierdzenia. Importowane Pine/Python/MCP nadal są wyłącznie tekstem badawczym.
 
-Panel **Centrum automatyzacji** prowadzi przez zapis wersji, walidację, zatwierdzenie, połączenie i osobny start OKX Demo. Sam zapis wersji, pobranie kodu ani pozytywny wykres nie uruchamia zleceń. Wykonawca Demo obsługuje obecnie cztery liniowe kryptokontrakty USDT-SWAP, tryb konta `net_mode`, depozyt izolowany i osobny klucz Demo z odczytem/handlem bez wypłat. Używaj dedykowanego konta/subkonta demonstracyjnego bez równoległych ręcznych transakcji ani zmian środków. Po zmianie salda z zewnętrznych przyczyn zmiana alokacji nie jest czystym wynikiem strategii i wymaga weryfikacji operatora.
+Panel **Centrum automatyzacji** prowadzi przez zapis wersji, walidację, zatwierdzenie, połączenie i osobny start OKX Demo. Sam zapis wersji, pobranie kodu ani pozytywny wykres nie uruchamia zleceń. Wykonawca Demo obsługuje obecnie liniowe kryptokontrakty USDT-SWAP z katalogu, o ile OKX potwierdzi aktywną specyfikację, tryb konta `net_mode`, depozyt izolowany i osobny klucz Demo z odczytem/handlem bez wypłat. Używaj dedykowanego konta/subkonta demonstracyjnego bez równoległych ręcznych transakcji ani zmian środków. Po zmianie salda z zewnętrznych przyczyn zmiana alokacji nie jest czystym wynikiem strategii i wymaga weryfikacji operatora.
 
 ### Windows — zalecana kolejność
 

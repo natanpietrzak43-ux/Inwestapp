@@ -6,6 +6,7 @@ import sqlite3
 import threading
 import time
 import urllib.request
+import network_guard
 import urllib.parse
 import uuid
 from contextlib import closing
@@ -84,8 +85,7 @@ def notify_pending():
     url=os.environ.get('INWESTAPP_ALERT_WEBHOOK','')
     if not url and not notification_channel.configured():return
     if url:
-        parsed=urllib.parse.urlsplit(url)
-        if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password:raise ValueError('Webhook wymaga HTTPS bez danych logowania w adresie.')
+        network_guard.validate_webhook(url)
     with database() as conn:
         schema(conn);rows=list(conn.execute('SELECT * FROM ops_events WHERE delivered=0 ORDER BY created_at LIMIT 3'))
     class NoRedirect(urllib.request.HTTPRedirectHandler):

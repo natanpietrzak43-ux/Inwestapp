@@ -7,7 +7,11 @@ function automationMessage(value,error=false){text('automation-state',value);$('
 function botParameters(){const form=$('bot-form');if(!form.reportValidity())throw Error('Uzupełnij poprawne parametry bota.');return formBody(form);}
 async function loadAutomation(){
  try{
-  await loadBotPresets();const [registry,demo,ops]=await Promise.all([api('/api/strategies/versions'),api('/api/demo/status'),api('/api/ops/status')]);
+  await loadBotPresets();const [registry,demo,ops,security]=await Promise.all([api('/api/strategies/versions'),api('/api/demo/status'),api('/api/ops/status'),api('/api/security')]);
+  text('security-state',`Panel lokalny · token operacji · blokada obcych stron · ograniczenia obciążenia. Pliki paczki: ${security.integrity.verified?'ZGODNE':'NIEZGODNE — pobierz ponownie cały ZIP'} (${security.integrity.checkedFiles}).`);
+  $('security-state').classList.toggle('warning',!security.integrity.verified);
+  text('security-notice',security.notice);
+  text('security-hosts',security.outboundHosts.join(', '));
   automationVersions=registry.versions;automationValidations=registry.validations;automationDemo=demo;
   const select=field($('validation-form'),'versionId'),prior=select.value;select.replaceChildren(...registry.versions.map(v=>{const o=element('option',`${v.config.instrument} · ${v.config.timeframe} · ${v.config.preset} · ${v.config.leverage}× · ${v.approved?'zatwierdzona':'bez dopuszczenia'} · ${v.id.slice(0,8)}`);o.value=v.id;return o;}));if(registry.versions.some(v=>v.id===prior))select.value=prior;
   const cfg=formBody($('bot-form'));text('automation-config',`Parametry formularza: ${cfg.instrument} · ${cfg.timeframe} · ${cfg.market} · ${cfg.preset} · dźwignia ${cfg.leverage||1}× · ryzyko ${cfg.risk}%. Przed zapisaniem wersji sprawdź limity w zakładce bota.`);

@@ -2,6 +2,7 @@
 import base64
 import json
 import os
+import tempfile
 from pathlib import Path
 
 
@@ -28,15 +29,21 @@ def write(path,values):
     content=json.dumps(values).encode()
     if os.name=='nt':content=json.dumps({'protection':'windows-dpapi','payload':base64.b64encode(_windows(content)).decode()}).encode()
     else:path.parent.chmod(0o700)
-    temp=path.with_suffix('.tmp')
-    fd=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
-    with os.fdopen(fd,'wb') as file:file.write(content)
-    temp.replace(path)
+    if path.is_symlink():raise ValueError('Prywatna konfiguracja nie może być dowiązaniem.')
+    fd,name=tempfile.mkstemp(prefix='.'+path.name+'-',suffix='.tmp',dir=path.parent)
+    temp=Path(name)
+    try:
+        with os.fdopen(fd,'wb') as file:
+            file.write(content);file.flush();os.fsync(file.fileno())
+        temp.replace(path)
+    finally:
+        temp.unlink(missing_ok=True)
     if os.name!='nt':path.chmod(0o600)
 
 
 def read(path):
     path=Path(path)
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>64_000:raise ValueError('Nieprawidłowy prywatny plik konfiguracji.')
     if os.name!='nt' and path.stat().st_mode&0o077:raise ValueError('Prywatny plik kluczy wymaga uprawnień 0600.')
     value=json.loads(path.read_text())
     if value.get('protection')=='windows-dpapi':

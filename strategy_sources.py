@@ -2,6 +2,7 @@
 import hashlib
 import re
 import urllib.request
+import network_guard
 from datetime import datetime,timezone
 from market_data import INSTRUMENTS
 from timeframes import TIMEFRAMES
@@ -37,7 +38,7 @@ def fetch(body):
     path=FILES[key];url=f'https://raw.githubusercontent.com/freqtrade/freqtrade-strategies/{REVISION}/{path}'
     request=urllib.request.Request(url,headers={'User-Agent':'Inwestapp/1.8','Accept':'text/plain'})
     try:
-        with urllib.request.urlopen(request,timeout=15) as response:raw=response.read(128_001)
+        raw=network_guard.read(request,limit=128_000,timeout=15)
     except OSError:raise ValueError('Nie udało się pobrać publicznego źródła Freqtrade. Nie podstawiono lokalnej kopii.') from None
     if len(raw)>128_000:raise ValueError('Źródło przekracza limit 128 KB.')
     try:code=raw.decode('utf-8')

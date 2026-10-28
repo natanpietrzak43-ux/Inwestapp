@@ -84,7 +84,7 @@ class PaperBotTests(unittest.TestCase):
         bot.advance(self.run,quote(value=100.5,stamp=self.now+4),now=self.now+4);self.assertIsNone(bot.current_state()['position'])
 
     def test_configuration_and_real_order_mode_are_rejected(self):
-        for changes in [{'instrument':'DOGE'},{'mode':'live'},{'risk':99},{'capital':float('inf')},{'daily_loss':0},{'preset':'external_code'}]:
+        for changes in [{'instrument':'UNKNOWN'},{'mode':'live'},{'risk':99},{'capital':float('inf')},{'daily_loss':0},{'preset':'external_code'}]:
             with self.subTest(changes=changes),self.assertRaises(ValueError):bot.start({**self.config,**changes})
         self.buy()
         with self.assertRaises(ValueError):bot.start({**self.config,'instrument':'BTC'})

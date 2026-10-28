@@ -3,6 +3,7 @@ import errno
 from http.server import ThreadingHTTPServer
 import socket
 import sys
+import threading
 
 
 def configure_listener(sock):
@@ -16,6 +17,31 @@ def configure_listener(sock):
 class LocalHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = False
     allow_reuse_port = False
+
+    def __init__(self, *args, **kwargs):
+        self.clients = threading.BoundedSemaphore(32)
+        super().__init__(*args, **kwargs)
+
+    def get_request(self):
+        connection, address = super().get_request()
+        connection.settimeout(15)
+        return connection, address
+
+    def process_request(self, request, client_address):
+        if not self.clients.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.clients.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.clients.release()
 
     def server_bind(self):
         configure_listener(self.socket)

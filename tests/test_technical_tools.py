@@ -132,7 +132,7 @@ class HourlyTests(unittest.TestCase):
             def __enter__(self):return self
             def __exit__(self,*_):pass
         CACHE.clear()
-        with patch('server.urllib.request.urlopen',return_value=Response()) as fetch,patch('server.json.load',return_value=payload):
+        with patch('network_guard.read_json',return_value=payload) as fetch:
             rows,_=fetch_bars('XRP','1h')
         self.assertEqual(len(rows),2)
         self.assertIn('interval=60m',fetch.call_args.args[0].full_url)

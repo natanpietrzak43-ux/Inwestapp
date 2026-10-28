@@ -18,7 +18,7 @@ def main():
             try:child.wait(timeout=50)
             except subprocess.TimeoutExpired:child.terminate();child.wait(timeout=10)
             return 0
-        if code in (0,3,4):return code
+        if code in (0,2,3,4):return code
         if time.monotonic()-started>300:delay=1
         print('Serwer zakonczyl prace z bledem; ponowne uruchomienie za '+str(delay)+' s.',flush=True)
         time.sleep(delay);delay=min(60,delay*2)

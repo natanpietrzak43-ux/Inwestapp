@@ -23,7 +23,7 @@ class NewsTests(unittest.TestCase):
 
     def test_failure_retains_old_items_explicitly_and_caches_failure(self):
         old={'provider':'test','url':'https://example.com/rss','items':[{'title':'XRP'}],'attempt':0,'fetchedAt':'2026-01-01','error':None,'stale':False}
-        with patch.dict(news.CACHE,{'https://example.com/rss':old},clear=True),patch('news_data.urllib.request.urlopen',side_effect=OSError()) as fetch:
+        with patch.dict(news.CACHE,{'https://example.com/rss':old},clear=True),patch('network_guard.read',side_effect=OSError()) as fetch:
             r=news.fetch_feed(('test','https://example.com/rss'));r2=news.fetch_feed(('test','https://example.com/rss'))
             self.assertTrue(r['stale']);self.assertIsNotNone(r['error']);self.assertEqual(r['items'],old['items']);self.assertEqual(r2,r);fetch.assert_called_once()
 

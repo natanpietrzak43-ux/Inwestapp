@@ -13,15 +13,20 @@ import webbrowser
 
 from app_release import APP_VERSION, FEATURES, STATIC_PATHS
 from local_server import port_busy, report_bind_error
+import release_integrity
 
 ROOT = Path(__file__).resolve().parent
 REQUIRED = ('notification_channel.py','decision_engine.py','shared_replay.py','execution_context.py','contract_specs.py','replay_market.py','runtime_ops.py','strategy_registry.py','strategy_validation.py','okx_demo.py','secure_store.py','demo_stream.py','demo_executor.py','server.py','app_release.py','local_server.py','leveraged_trading.py','futures_bot.py','bot_backtest.py','strategy_sources.py','analysis_engine.py','market_data.py','paper_bot.py',
             'agent_pipeline.py','okx_data.py','technical_tools.py','custom_indicators.py',
             'timeframes.py','user_data.py','news_data.py','strategy_lab.py','trader_mcp.py')
+REQUIRED += ('http_security.py','network_guard.py','release_integrity.py','instrument_catalog.py','release-manifest.json')
 
 
 def installation_errors(root=ROOT):
     errors=[]
+    integrity=release_integrity.verify(root)
+    if not integrity['verified']:
+        errors.extend('Niezgodny plik paczki: '+name for name in integrity['changedFiles'])
     for name in (*REQUIRED, *('web/'+name for name in STATIC_PATHS.values())):
         if not (root/name).is_file():errors.append('Brak pliku: '+name)
     if (root/'web/index.html').is_file():

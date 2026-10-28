@@ -1,4 +1,10 @@
-# Weryfikacja automatyzacji 2.0
+# Weryfikacja automatyzacji 2.1
+
+Aktualizacja 28.10.2026: wydanie 2.1.0 dodaje ochronę lokalnego API, CSP, limity i kontrolę zgodności paczki oraz 12 kryptowalut (łącznie 16). Przeszło 236 testów Python/HTTP, 14 testów modelu wykresu i 5 zestawów Chromium: start, wykres, bot, automatyzacja i próby ataków. Przeglądarka potwierdziła zablokowanie obcej strony oraz skryptu inline; złośliwe nagłówki wiadomości pozostały tekstem. Formularz specyfikacji w teście automatyzacji używał kontrolowanej odpowiedzi, nie bieżącego API OKX. Import publicznego źródła Freqtrade w teście bota zakończył się zapisem materiału bez wykonania kodu.
+
+Dzisiejsze publiczne sprawdzenie dostępności nowych par na OKX/Coinbase zatrzymała blokada proxy HTTP403. Katalog nie jest dowodem aktualnego notowania. Brak aktywnych danych/specyfikacji blokuje analizę/wykonanie. Nadal nie wykonano uwierzytelnionych operacji na koncie OKX Demo ani testu Windows/DPAPI/skanowania Defender na komputerze użytkownika. Szczegóły granic ochrony: [SECURITY.md](../SECURITY.md).
+
+Poniżej zachowano dowody i warunki z wdrożenia 2.0; nie oznaczają ponownego sprawdzenia dostawcy na dzień wydania 2.1.
 
 Stan: 24.10.2026. Implementacja w projekcie nie jest potwierdzeniem uruchomienia na Windows użytkownika ani dostępu do jego giełdy.
 

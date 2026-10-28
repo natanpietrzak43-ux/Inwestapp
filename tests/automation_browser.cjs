@@ -5,8 +5,10 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8032';
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1500,height:1050}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/quotes**',r=>r.fulfill({json:{quotes:[],alertEvents:[]}}));await page.route('**/api/analyze?*',r=>r.fulfill({status:502,json:{error:'Controlled feed failure'}}));
+  // The exchange contract below is a controlled fixture, not a live API check.
+  await page.route('**/api/contracts?*',r=>r.fulfill({json:{instId:'XLM-USDT-SWAP',unitsPerContract:'100',lotSz:'0.1',minSz:'0.1',tickSz:'0.00001',tiers:[{tier:1}]}}));
  try{
-  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.0.0');
+  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.1.0');
   await page.click('[data-tab="bot"]');await page.waitForFunction(()=>document.querySelectorAll('#bot-form [name="preset"] option').length===5);
   await page.waitForFunction(()=>document.querySelector('#bot-state').textContent!=='Wczytywanie stanu…');
   await page.selectOption('#bot-form [name="market"]','perpetual');await page.selectOption('#bot-form [name="instrument"]','XLM');await page.fill('#bot-form [name="leverage"]','2');
@@ -24,6 +26,6 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8032';
   await page.setViewportSize({width:390,height:844});await page.locator('#demo-state').scrollIntoViewIfNeeded();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   await page.locator('#demo-state').screenshot({path:'/tmp/inwestapp-v200-demo-state.png'});
   const demo=await(await page.request.get(base+'/api/demo/status')).json();assert.equal(demo.state,null);assert.equal(demo.configured,false);
-  assert.deepEqual(errors,[]);console.log('PASS: automation centre, frozen version, approval/key gates, read-only connection check, verified backup, truthful notifications, real contract spec, mobile layout; no demo orders.');
+  assert.deepEqual(errors,[]);console.log('PASS: automation centre, frozen version, approval/key gates, read-only connection check, verified backup, truthful notifications, fixture contract spec, mobile layout; no demo orders.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

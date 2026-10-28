@@ -19,6 +19,10 @@ function metric(label,value,detail,cls=''){const a=element('article',undefined,'
 async function submit(form,fn){const button=form.querySelector('[type="submit"]');button.disabled=true;try{await fn();}catch(err){message(form,err.message,true);}finally{button.disabled=false;}}
 function assetName(key){return INSTRUMENTS.find(i=>i.id===key)?.name||key;}
 for(const select of document.querySelectorAll('.asset-select'))select.replaceChildren(...INSTRUMENTS.map(i=>{const option=element('option',i.name+' · USD');option.value=i.id;return option;}));
+for(const select of document.querySelectorAll('.crypto-select')){
+ select.replaceChildren(...INSTRUMENTS.filter(i=>i.kind==='crypto').map(i=>{const option=element('option',i.name+' · USDT');option.value=i.id;return option;}));
+ select.value='XLM';
+}
 
 async function refreshAlerts(){
  const result=await api('/api/alerts');alertsState=result;

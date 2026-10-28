@@ -10,7 +10,7 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8023';
  await page.route('**/api/quotes**',r=>r.fulfill({json:{quotes:[],alertEvents:[]}}));
  await page.route('**/api/analyze?*',r=>r.fulfill({status:502,json:{error:'Controlled feed failure during bot UI test'}}));
  try{
-  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.0.0');
+  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.1.0');
   await page.click('[data-tab="bot"]');await page.waitForFunction(()=>document.querySelectorAll('#replay-form [name="preset"] option').length===5);
   await page.waitForFunction(()=>document.querySelector('#bot-state').textContent!=='Wczytywanie stanu…');
   await page.selectOption('#bot-form [name="market"]','spot');
@@ -49,5 +49,5 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8023';
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'mobile viewport must not overflow');
   await page.locator('#replay-chart').screenshot({path:'/tmp/inwestapp-v180-replay-chart.png'});
   assert.deepEqual(errors,[]);console.log('PASS: futures controls, paper start/stop, replay/config copy, independent account, JSON download, persistence, public strategy context, mobile layout.');
- }finally{await page.request.post(base+'/api/bot/stop',{data:{}});await browser.close();}
+ }finally{try{const session=await(await page.request.get(base+'/api/session',{headers:{'X-Inwestapp-Client':'browser'}})).json();await page.request.post(base+'/api/bot/stop',{data:{},headers:{'X-Inwestapp-Token':session.csrfToken}});}finally{await browser.close();}}
 })().catch(e=>{console.error(e);process.exit(1)});

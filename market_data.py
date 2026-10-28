@@ -6,27 +6,19 @@ import time
 import urllib.parse
 import urllib.request
 import okx_data
+import network_guard
+from instrument_catalog import INSTRUMENTS
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 QUOTE_CACHE_SECONDS = 10
-INSTRUMENTS = {
-    'XRP': {'name': 'XRP', 'symbol': 'XRP-USD', 'kind': 'crypto', 'description': 'XRP / USD · rynek spot'},
-    'XLM': {'name': 'Stellar', 'symbol': 'XLM-USD', 'kind': 'crypto', 'description': 'XLM / USD · rynek spot'},
-    'BTC': {'name': 'Bitcoin', 'symbol': 'BTC-USD', 'kind': 'crypto', 'description': 'BTC / USD · rynek spot'},
-    'ETH': {'name': 'Ethereum', 'symbol': 'ETH-USD', 'kind': 'crypto', 'description': 'ETH / USD · rynek spot'},
-    'SILVER': {'name': 'Srebro', 'symbol': 'SI=F', 'kind': 'commodity', 'description': 'Silver futures · cena referencyjna'},
-    'OIL': {'name': 'Ropa WTI', 'symbol': 'CL=F', 'kind': 'commodity', 'description': 'WTI futures · cena referencyjna'},
-    'GOLD': {'name': 'Złoto', 'symbol': 'GC=F', 'kind': 'commodity', 'description': 'Gold futures · cena referencyjna'},
-}
 _CACHE = {}
 _LOCKS = {(key,source): threading.Lock() for key in INSTRUMENTS for source in ('reference','okx')}
 
 
 def read_json(url):
     request = urllib.request.Request(url, headers={'User-Agent': 'Inwestapp/1.5', 'Accept': 'application/json'})
-    with urllib.request.urlopen(request, timeout=12) as response:
-        return json.load(response)
+    return network_guard.read_json(request)
 
 
 def number(value, positive=False):

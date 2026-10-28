@@ -9,11 +9,13 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import network_guard
+from instrument_catalog import CRYPTO
 from datetime import datetime, timezone
 from pathlib import Path
 
 BASE = 'https://www.okx.com'
-SYMBOLS = {key: key+'-USDT' for key in ('XRP','XLM','BTC','ETH')}
+SYMBOLS = {key: key+'-USDT' for key in CRYPTO}
 BARS = {'15m':'15m','30m':'30m','1h':'1H','2h':'2H','4h':'4H','1d':'1Dutc'}
 SECONDS = {'15m':900,'30m':1800,'1h':3600,'2h':7200,'4h':14400,'1d':86400}
 MAX_BARS = 5000
@@ -22,7 +24,7 @@ CACHE_DIR = Path(__file__).parent / '.cache' / 'okx'
 
 
 def symbol(key,market='spot'):
-    if key not in SYMBOLS:raise ValueError('OKX obsługuje w tej aplikacji tylko XRP, XLM, BTC i ETH spot / USDT.')
+    if key not in SYMBOLS:raise ValueError('Wybierz kryptowalutę z katalogu OKX / USDT.')
     if market not in ('spot','perpetual'):raise ValueError('Nieprawidłowy rynek OKX.')
     return SYMBOLS[key]+('-SWAP' if market=='perpetual' else '')
 
@@ -37,10 +39,7 @@ def number(value, positive=True):
 def request(path,params):
     # Paths are internal constants, never accepted from remote research or forms.
     req=urllib.request.Request(BASE+path+'?'+urllib.parse.urlencode(params),headers={'User-Agent':'Inwestapp/1.6','Accept':'application/json'})
-    with urllib.request.urlopen(req,timeout=12) as response:
-        raw=response.read(2_000_001)
-    if len(raw)>2_000_000:raise ValueError('Odpowiedź OKX jest zbyt duża.')
-    payload=json.loads(raw)
+    payload=network_guard.read_json(req)
     if payload.get('code')!='0' or not isinstance(payload.get('data'),list):raise ValueError('OKX nie udostępnił poprawnych danych rynkowych.')
     return payload['data']
 

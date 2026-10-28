@@ -1,9 +1,11 @@
-"""Single-user local server. No broker connection or automatic orders."""
+"""Single-user loopback server; paper trading and separately gated OKX Demo."""
 import argparse
 from app_release import APP_VERSION, FEATURES, STATIC_PATHS
 import csv
 import io
 import json
+import http_security
+import network_guard
 import random
 import sqlite3
 import paper_bot
@@ -42,7 +44,7 @@ LOCK = threading.Lock()
 
 def demo_bars(key, timeframe='1d'):
     rng = random.Random(key + '-inwestapp-v1')
-    price = {'XRP': 1.8, 'XLM': .24, 'BTC': 65000, 'ETH': 2500, 'SILVER': 30, 'OIL': 68, 'GOLD': 2500}[key]
+    price = INSTRUMENTS[key]['demoPrice']
     today = datetime.now(timezone.utc).replace(minute=0,second=0,microsecond=0)
     if timeframe=='1d':today=today.replace(hour=0)
     bars = []
@@ -70,8 +72,7 @@ def fetch_bars(key, timeframe='1h',source='reference'):
     symbol = urllib.parse.quote(INSTRUMENTS[key]['symbol'], safe='')
     url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range={spec["range"]}&interval={spec["providerInterval"]}'
     request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        payload = json.load(response)
+    payload = network_guard.read_json(request, limit=8_000_000, timeout=20)
     result = payload['chart']['result'][0]
     quote = result['indicators']['quote'][0]
     now = datetime.now(timezone.utc)
@@ -109,29 +110,73 @@ def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d',
 
 
 class Handler(BaseHTTPRequestHandler):
+    server_version = 'Inwestapp'
+    sys_version = ''
+
+    def log_message(self, format, *args):
+        # No request URL, imported text, token or account value in console logs.
+        pass
+
+    def end_headers(self):
+        for name, value in http_security.HEADERS.items():
+            self.send_header(name, value)
+        if getattr(self, '_response_status', 200) in (429, 503):
+            self.send_header('Retry-After', '5')
+        super().end_headers()
+
+    def send_response(self, code, message=None):
+        self._response_status = code
+        super().send_response(code, message)
+
+    def send_error(self, code, message=None, explain=None):
+        self.close_connection = True
+        self.send_json({'error': 'Żądanie HTTP zostało odrzucone.', 'status': code}, code)
+
     def send_json(self, payload, status=200):
         raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
-        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Content-Length', str(len(raw)))
         self.end_headers()
         try:self.wfile.write(raw)
         except (ConnectionError,TimeoutError):pass
 
     def allowed(self, write=False):
-        host=self.headers.get('Host','')
-        parsed=urllib.parse.urlparse('//'+host)
-        if parsed.hostname not in ('localhost','127.0.0.1','::1'):
-            self.send_json({'error':'Serwer jest przeznaczony do użytku lokalnego.'},403);return False
-        origin=self.headers.get('Origin')
-        if write and origin and origin != 'http://'+host:
-            self.send_json({'error':'Niedozwolone źródło żądania.'},403);return False
-        return True
+        return http_security.check(self, write)
+
+    def dispatch(self, action, write=False):
+        if not self.allowed(write):return
+        heavy = urllib.parse.urlsplit(self.path).path in http_security.HEAVY
+        gate = http_security.state(self.server).heavy
+        if heavy and not gate.acquire(blocking=False):
+            return self.send_json({'error':'Trwają już obliczenia. Poczekaj na ich zakończenie.'},429)
+        try:
+            return action()
+        except (TimeoutError, ConnectionError):
+            self.close_connection = True
+            return self.send_json({'error':'Przekroczono czas odczytu żądania.'},408)
+        except Exception:
+            self.close_connection = True
+            return self.send_json({'error':'Operacja nie została potwierdzona. Sprawdź stan aplikacji przed ponowieniem.'},500)
+        finally:
+            if heavy:gate.release()
 
     def do_GET(self):
-        if not self.allowed():return
+        return self.dispatch(self.get)
+
+    def get(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == '/api/session':
+            if self.headers.get('X-Inwestapp-Client') != 'browser':
+                return self.send_json({'error':'Wymagany nagłówek klienta aplikacji.'},403)
+            return self.send_json({'csrfToken':http_security.state(self.server).token})
+        if parsed.path == '/api/security':
+            import release_integrity
+            return self.send_json({'localOnly':True,'csrfProtection':True,'contentSecurityPolicy':True,
+                'outboundHosts':sorted(network_guard.HOSTS),'redirectsAllowed':False,
+                'maxConnections':32,'maxConcurrentAnalyses':2,'integrity':release_integrity.verify(),
+                'notice':'Ochrona aplikacji nie zastępuje Microsoft Defender ani aktualizacji Windows. Token nie chroni przed programem działającym już na Twoim koncie Windows.'})
         if parsed.path == '/api/health':
             return self.send_json({'status': 'ok', 'version': APP_VERSION, 'instruments': list(INSTRUMENTS), 'features': FEATURES})
         if parsed.path in ('/api/ops/status','/api/demo/status','/api/strategies/versions','/api/contracts'):
@@ -145,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:return self.send_json({'error':str(error)},400)
             except OSError:return self.send_json({'error':'Brak potwierdzenia danych od dostawcy.'},502)
         if parsed.path=='/api/catalog':
-            return self.send_json({'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False},
+            return self.send_json({'instruments':INSTRUMENTS,'tools':TOOLS,'presets':PRESETS,'timeframes':TIMEFRAMES,'sources':SOURCES,'dataSources':{'reference':{'currency':'USD','cryptoHistory':'Yahoo Finance','cryptoQuotes':'Coinbase Exchange'},'okx':{'currency':'USDT','instruments':list(okx_data.SYMBOLS),'readOnly':True}},'agentEngine':{'type':'local_rules','version':'1','llm':False},
                                    'botMarkets':{'spot':{'paperOnly':True,'leverageMax':1},'perpetual':{'paperOnly':True,'source':'okx','instruments':list(okx_data.SYMBOLS),'leverageMin':1,'leverageMax':10,'margin':'isolated_simulation'}}})
         if parsed.path=='/api/bot/backtests':
             identifier=urllib.parse.parse_qs(parsed.query).get('id',[None])[0]
@@ -226,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = file.read_bytes()
         self.send_response(200)
         self.send_header('Content-Type', {'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}[file.suffix[1:]])
-        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Content-Length', str(len(raw)))
         self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         try:self.wfile.write(raw)
@@ -237,13 +282,22 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):return self.mutate('DELETE')
 
     def mutate(self,method):
-        if not self.allowed(write=True):return
+        return self.dispatch(lambda:self.mutate_body(method), write=True)
+
+    def mutate_body(self,method):
         try:
             if self.headers.get('Content-Type','').split(';')[0]!='application/json':
                 return self.send_json({'error':'Wymagany typ application/json.'},415)
-            length=int(self.headers.get('Content-Length',0))
-            if not 0<length<=9_000_000:raise ValueError('Żądanie może mieć maksymalnie 9 MB.')
-            body=json.loads(self.rfile.read(length))
+            lengths=self.headers.get_all('Content-Length',[])
+            if len(lengths)!=1 or not lengths[0].isascii() or not lengths[0].isdigit():
+                raise ValueError('Wymagana jednoznaczna długość żądania.')
+            length=int(lengths[0])
+            limit=9_000_000 if self.path in ('/api/import','/api/bot/backtest','/api/strategies/test') else 256_000
+            if not 0<length<=limit:
+                return self.send_json({'error':'Żądanie przekracza limit rozmiaru.'},413)
+            raw=self.rfile.read(length)
+            if len(raw)!=length:raise ValueError('Niekompletna treść żądania.')
+            body=http_security.strict_json(raw)
             if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
             if method=='POST' and self.path in ('/api/demo/start','/api/demo/stop','/api/demo/close','/api/demo/check','/api/ops/backup',
                                                 '/api/ops/notify-test','/api/strategies/version','/api/strategies/validate','/api/strategies/approve','/api/strategies/revoke'):
@@ -335,11 +389,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(package(key, bars, 'csv', *args,timeframe=body.get('timeframe','1d'),tools=body.get('tools'),strategy=body.get('strategy','trend')))
         except (ValueError, KeyError, TypeError, IndexError) as exc:
             return self.send_json({'error': str(exc)}, 400)
+        except (TimeoutError,ConnectionError):
+            raise
         except (sqlite3.Error,OSError):
             return self.send_json({'error':'Baza danych jest niedostępna.'},503)
 
 
 if __name__ == '__main__':
+    import release_integrity
+    if not release_integrity.verify()['verified']:
+        print('Pliki paczki sa niekompletne lub zmienione. Uruchom Sprawdz-bezpieczenstwo.bat i pobierz caly ZIP ponownie.',flush=True)
+        raise SystemExit(2)
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8000)

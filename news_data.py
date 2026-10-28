@@ -6,6 +6,8 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import network_guard
+from instrument_catalog import CRYPTO
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -13,6 +15,7 @@ from email.utils import parsedate_to_datetime
 FEEDS=[('CoinDesk','https://www.coindesk.com/arc/outboundfeeds/rss/'),
        ('Cointelegraph','https://cointelegraph.com/rss'),('EIA','https://www.eia.gov/rss/todayinenergy.xml')]
 QUERIES={'BTC':'Bitcoin BTC cryptocurrency','ETH':'Ethereum ETH cryptocurrency','XRP':'XRP Ripple cryptocurrency','XLM':'XLM Stellar Lumens','GOLD':'gold price commodity','SILVER':'silver price commodity','OIL':'WTI crude oil price'}
+QUERIES.update({key:name+' '+key+' cryptocurrency' for key,(name,_,_) in CRYPTO.items() if key not in QUERIES})
 CACHE={};LOCK=threading.Lock()
 
 
@@ -29,6 +32,13 @@ def matches(key,text):
     if key=='XLM':return bool(re.search(r'\bxlm\b|stellar lumens',text) or ('stellar' in text and re.search(r'blockchain|token|network|crypto',text)))
     if key=='BTC':return bool(re.search(r'\bbitcoin\b|\bbtc\b',text))
     if key=='ETH':return bool(re.search(r'\bethereum\b|\beth\b|\bether\b',text))
+    if key in CRYPTO:
+        name=CRYPTO[key][0].casefold()
+        # Short tickers such as DOT/UNI can be ordinary words: require crypto context.
+        by_name=bool(re.search(r'\b'+re.escape(name)+r'\b',text))
+        by_ticker=bool(re.search(r'\b'+re.escape(key.casefold())+r'\b',text))
+        context=bool(re.search(r'crypto|blockchain|token|coin|usdt|usd|price|trading|market',text))
+        return (by_name or by_ticker) and context
     if key=='GOLD':return bool(re.search(r'\bgold\b',text))
     if key=='SILVER':return bool(re.search(r'\bsilver\b',text) and 'silver lining' not in text)
     return bool(re.search(r'\boil\b|\bcrude\b|\bwti\b|\bopec\b|petroleum',text))
@@ -83,7 +93,7 @@ def fetch_feed(spec):
     if cached and time.time()-cached['attempt']<(60 if cached['error'] else 900):return cached
     try:
         req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0 (Inwestapp RSS reader)','Accept':'application/rss+xml, application/xml, text/xml'})
-        with urllib.request.urlopen(req,timeout=12) as response:raw=response.read(2_000_001)
+        raw=network_guard.read(req)
         entries=parse_feed(raw,provider)
         result={'provider':provider,'url':url,'items':entries,'attempt':time.time(),'fetchedAt':datetime.now(timezone.utc).isoformat(),'error':None,'stale':False}
     except Exception:

@@ -1,10 +1,10 @@
 const $ = id => document.getElementById(id);
-const INSTRUMENTS = [{id:'XRP',name:'XRP',sub:'XRP / USD',icon:'×',class:'xrp',kind:'crypto'}, {id:'XLM',name:'Stellar',sub:'XLM / USD',icon:'S',class:'xlm',kind:'crypto'}, {id:'BTC',name:'Bitcoin',sub:'BTC / USD',icon:'₿',class:'btc',kind:'crypto'}, {id:'ETH',name:'Ethereum',sub:'ETH / USD',icon:'Ξ',class:'eth',kind:'crypto'}, {id:'SILVER',name:'Srebro',sub:'Silver futures',icon:'Ag',class:'silver'}, {id:'OIL',name:'Ropa WTI',sub:'WTI futures',icon:'◈',class:'oil'}, {id:'GOLD',name:'Złoto',sub:'Gold futures',icon:'Au',class:'gold'}];
+const INSTRUMENTS = window.INWESTAPP_INSTRUMENTS;
 let selected='XRP', data=null, range=7, tab='analysis', importCsv=null, requestId=0, catalog=null;
 const marketChart=new MarketChart({container:$('price-chart'),redraw:()=>{if(data)drawPrice();}});
 const fmt=(v,n=2)=>Number.isFinite(v)?v.toLocaleString('pl-PL',{minimumFractionDigits:n,maximumFractionDigits:n}):'—';
 const price=v=>fmt(v,v>0&&v<.0001?9:v<1?4:v<10?3:2);
-const quotePrice=(v,id)=>fmt(v,v>0&&v<.0001?9:id==='XRP'?4:id==='XLM'?6:2);
+const quotePrice=(v,id)=>fmt(v,v>0&&v<.0001?9:v<1?6:v<10?4:2);
 const labels={BUY:'Kup',SELL:'Sprzedaj',WAIT:'Czekaj'};
 function text(id,value){$(id).textContent=value;}
 function toolIds(){return Array.from(document.querySelectorAll('#tool-options input:checked'),e=>e.value);}
@@ -198,7 +198,7 @@ function choosePreset(name){const p=catalog.presets[name];if(!p)return;document.
 async function initialize(){
  createQuoteCards();renderInstruments();
  try{
-  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 2.0.0 z nowego folderu.');catalog=await response.json();
+  const response=await fetch('/api/catalog');if(!response.ok)throw Error('Brak katalogu narzędzi. Upewnij się, że uruchomiona jest wersja 2.1.0 z nowego folderu.');catalog=await response.json();
   let saved={};try{const value=JSON.parse(localStorage.getItem('inwestapp.settings')||'{}');saved=value&&typeof value==='object'?value:{};}catch{}
   const chosen=Array.isArray(saved.tools)?saved.tools.filter(t=>catalog.tools[t]):catalog.presets.balanced.tools;
   if(['trend','range'].includes(saved.strategy))$('strategy').value=saved.strategy;if(catalog.timeframes[saved.timeframe])$('timeframe').value=saved.timeframe;

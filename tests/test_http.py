@@ -28,6 +28,8 @@ class HttpTests(unittest.TestCase):
         cls.thread = threading.Thread(target=cls.server.serve_forever,daemon=True)
         cls.thread.start()
         cls.base = 'http://127.0.0.1:'+str(cls.server.server_port)
+        req=urllib.request.Request(cls.base+'/api/session',headers={'X-Inwestapp-Client':'browser'})
+        with urllib.request.urlopen(req) as response:cls.token=json.load(response)['csrfToken']
 
     @classmethod
     def tearDownClass(cls):
@@ -39,7 +41,7 @@ class HttpTests(unittest.TestCase):
 
     def request(self, path, body=None):
         req = urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,
-                                     headers={'Content-Type':'application/json'})
+                                     headers={'Content-Type':'application/json','X-Inwestapp-Token':self.token})
         try:
             with urllib.request.urlopen(req) as response:
                 return response.status,json.load(response)
@@ -82,7 +84,7 @@ class HttpTests(unittest.TestCase):
             if getattr(request,'full_url','').startswith('https://raw.githubusercontent.com/'):
                 return io.BytesIO(b'print("must not execute")\n# <script>alert(1)</script>')
             return original(request,*args,**kwargs)
-        with patch('strategy_sources.urllib.request.urlopen',side_effect=transport):
+        with patch('network_guard.open_url',side_effect=transport):
             status,record=self.request('/api/strategies/source',{'template':'strategy001','instrument':'ETH','timeframe':'4h','market':'perpetual'})
         self.assertEqual(status,200);self.assertFalse(record['verified']);self.assertEqual(record['context']['instrument'],'ETH')
         self.assertFalse(record['context']['suitabilityVerified']);self.assertEqual(len(record['sha256']),64);self.assertEqual(record['license'],'GPL-3.0')
@@ -138,7 +140,7 @@ class HttpTests(unittest.TestCase):
             ('POST','/api/alerts',{}, {'Content-Type':'text/plain'},415),
             ('GET','/api/export',None,{'Host':'evil.example'},403),
             ('DELETE','/api/alerts/'+alert['id'],{}, {'Content-Type':'application/json'},200)]:
-            req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,method=method,headers=headers)
+            req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,method=method,headers={**headers,'X-Inwestapp-Token':self.token})
             try:
                 with urllib.request.urlopen(req) as r:code=r.status
             except urllib.error.HTTPError as exc:code=exc.code
@@ -146,7 +148,7 @@ class HttpTests(unittest.TestCase):
         self.assertFalse(any(a['id']==alert['id'] for a in self.request('/api/alerts')[1]['alerts']))
 
     def test_news_and_forecast_routes_reject_invalid_instrument(self):
-        for path in ('/api/news?instrument=DOGE','/api/forecasts?instrument=DOGE'):
+        for path in ('/api/news?instrument=UNKNOWN','/api/forecasts?instrument=UNKNOWN'):
             self.assertEqual(self.request(path)[0],400)
         example={'items':[],'sources':[],'notice':'test'}
         with patch('server.get_news',return_value=example):self.assertEqual(self.request('/api/news?instrument=XRP'),(200,example))
@@ -167,7 +169,8 @@ class HttpTests(unittest.TestCase):
             status,r=self.request('/api/mcp/status');self.assertEqual(status,200);self.assertFalse(r['connected']);self.assertNotIn('key',r)
 
     def test_all_demo_routes(self):
-        for key in ('XRP','XLM','BTC','ETH','SILVER','OIL','GOLD'):
+        from instrument_catalog import INSTRUMENTS
+        for key in INSTRUMENTS:
             status,result=self.request('/api/analyze?mode=demo&instrument='+key)
             self.assertEqual(status,200)
             self.assertEqual(result['decision']['action'],'WAIT')
@@ -199,7 +202,7 @@ class HttpTests(unittest.TestCase):
             self.assertEqual(self.request('/api/import',body)[0],400)
 
     def test_invalid_parameters_and_instrument(self):
-        self.assertEqual(self.request('/api/analyze?instrument=DOGE')[0],400)
+        self.assertEqual(self.request('/api/analyze?instrument=UNKNOWN')[0],400)
         self.assertEqual(self.request('/api/analyze?mode=demo&risk=9')[0],400)
         self.assertEqual(self.request('/api/analyze?mode=demo&capital=nan')[0],400)
 
@@ -230,7 +233,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status,200)
         self.assertEqual(result['quotes'],example['quotes'])
         self.assertEqual(result['alertEvents'],[])
-        self.assertEqual(self.request('/api/quotes?instrument=DOGE')[0],400)
+        self.assertEqual(self.request('/api/quotes?instrument=UNKNOWN')[0],400)
 
     def test_catalog_defaults_and_empty_selection(self):
         status,catalog=self.request('/api/catalog')

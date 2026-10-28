@@ -60,10 +60,10 @@ def configuration(body):
     capital,risk,costs=parameters(body.get('capital',10000),body.get('risk',1),body.get('costs',10))
     source=body.get('source','reference');engine=body.get('engine','agents')
     if source not in ('reference','okx') or engine not in ('classic','agents'):raise ValueError('Nieprawidłowe źródło lub silnik bota.')
-    if source=='okx' and INSTRUMENTS[key]['kind']!='crypto':raise ValueError('OKX: wybierz XRP, XLM, BTC lub ETH / USDT.')
+    if source=='okx' and INSTRUMENTS[key]['kind']!='crypto':raise ValueError('OKX: wybierz kryptowalutę z katalogu / USDT.')
     contract=leverage.options(body)
     if contract['market']=='perpetual' and (source!='okx' or engine!='agents' or INSTRUMENTS[key]['kind']!='crypto'):
-        raise ValueError('Futures wymagają źródła OKX, zespołu agentów i instrumentu XRP/XLM/BTC/ETH.')
+        raise ValueError('Futures wymagają źródła OKX, zespołu agentów i kryptowaluty z katalogu.')
     return {'instrument':key,'timeframe':tf,'preset':preset,'capital':capital,'risk':risk,'costs':costs,
             **contract,
             'source':source,'engine':engine,'currency':'USDT' if source=='okx' else 'USD',
