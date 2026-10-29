@@ -246,6 +246,28 @@ class HttpTests(unittest.TestCase):
         self.assertTrue(result['decision']['missingGroups'])
         self.assertEqual(result['decision']['action'],'WAIT')
 
+    def test_coingecko_missing_key_is_explicit_and_cannot_be_execution_source(self):
+        with patch.dict(os.environ,{'COINGECKO_DEMO_API_KEY':''}),patch('coingecko_data.network_guard.read_json') as fetch:
+            status,state=self.request('/api/coingecko/status');self.assertEqual(status,200);self.assertFalse(state['configured'])
+            status,state=self.request('/api/coingecko/overview');self.assertEqual(status,400);self.assertIn('Brak klucza',state['error'])
+        fetch.assert_not_called()
+        self.assertEqual(self.request('/api/analyze?mode=coingecko')[0],400)
+        self.assertEqual(self.request('/api/bot/start',{'source':'coingecko'})[0],400)
+
+    def test_coingecko_route_has_16_usd_prices_without_mutating_bot_or_alerts(self):
+        import coingecko_data
+        from test_coingecko import fixtures
+        payload=fixtures();coingecko_data._IDENTITY=None
+        def transport(request):
+            kind=next(k for k,path in coingecko_data.PATHS.items() if urllib.parse.urlsplit(request.full_url).path.endswith(path))
+            return payload[kind]
+        before=self.request('/api/bot')[1]['state'];alerts=self.request('/api/alerts')[1]
+        with patch.dict(os.environ,{'COINGECKO_DEMO_API_KEY':'CG_HTTP_TEST_ONLY'}),patch('network_guard.read_json',side_effect=transport):
+            status,overview=self.request('/api/coingecko/overview')
+        self.assertEqual(status,200);self.assertEqual(overview['currency'],'USD');self.assertEqual(len(overview['sections']['markets']['data']),16)
+        self.assertEqual(self.request('/api/bot')[1]['state'],before);self.assertEqual(self.request('/api/alerts')[1],alerts)
+        self.assertNotIn('CG_HTTP_TEST_ONLY',json.dumps(overview))
+
     def test_hourly_import_and_explicit_selected_tools(self):
         file=io.StringIO();writer=csv.DictWriter(file,fieldnames=['date','open','high','low','close','volume'])
         writer.writeheader();writer.writerows(demo_bars('XRP','1h'))

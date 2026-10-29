@@ -8,7 +8,7 @@ import agent_pipeline
 import leveraged_trading as model
 from timeframes import TIMEFRAMES,candle_time
 
-VERSION='2.1.0'
+VERSION='2.2.0'
 REFRESH_BARS=24
 LOOKBACK=2000
 

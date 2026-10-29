@@ -200,6 +200,6 @@ def forecast_summary(key,horizon,quote=None):
 def export_data():
     with database() as conn:
         names=('alerts','alert_events','trades','forecasts','paper_state','paper_events','paper_trades','strategy_research','agent_cycles','paper_accounts','bot_backtests',
-               'strategy_versions','strategy_validations','demo_state','demo_orders','demo_fills','ops_events','runtime_heartbeats')
+               'strategy_versions','strategy_validations','demo_state','demo_orders','demo_fills','ops_events','runtime_heartbeats','coingecko_usage')
         tables={table:[dict(r) for r in conn.execute('SELECT * FROM '+table)] for table in names if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone()}
     return {'schemaVersion':1,'exportedAt':now_iso(),'tables':tables}

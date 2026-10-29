@@ -1,7 +1,27 @@
-# Inwestapp 2.1.0
+# Inwestapp 2.2.0
 
 Prywatny warsztat analizy 16 kryptowalut i referencyjnych cen surowców. Bot papierowy oraz osobny wykonawca **OKX Demo**. **Brak trybu handlu prawdziwymi środkami.**
 
+
+## Aktualizacja 2.2.0 — CoinGecko jako dodatkowy kontekst rynku
+
+Nowa zakładka **CoinGecko** pokazuje ceny zbiorcze w USD dla 16 kryptowalut, zmiany 24 h / 7 dni / 30 dni, kapitalizację, wolumen 24 h i matematyczną odległość do dawnego ATH. Dodatkowo prezentuje kapitalizację szerokiego rynku, dominację BTC/ETH i popularne wyszukiwania. Odległość do ATH nie jest prognozą zysku, a popularność nie jest rekomendacją. Rynki złota, srebra i ropy pozostają przy dotychczasowych źródłach.
+
+To bezpośrednia integracja **REST API Demo CoinGecko**, oddzielna od wtyczki w czacie. Bieżąca sesja nie udostępniała narzędzi tej wtyczki. Wtyczka nie przekazuje klucza lokalnej aplikacji ani nie zapewnia jej stałego połączenia. W chmurze nie było klucza CoinGecko; próby odczytu oficjalnego API/dokumentacji dostały blokadę proxy HTTP403. Nie potwierdzono działania połączenia z autentycznym kontem ani bieżących limitów/warunków planu. Testy integracji używają kontrolowanych odpowiedzi dostawcy. Aktualne plany: https://www.coingecko.com/en/api ; dokumentacja: https://docs.coingecko.com/reference/coins-markets .
+
+**Uruchomienie na Windows:** zatrzymaj poprzedni serwer/nadzór, rozpakuj cały ZIP 2.2.0 do nowego folderu, wykonaj kontrolę plików, uruchom aplikację. Dane Windows nadal są domyślnie w `%LOCALAPPDATA%\Inwestapp`. Utwórz klucz **Demo API** we własnym koncie CoinGecko, uruchom **Konfiguruj-CoinGecko.bat**, wpisz go w ukrytym polu i zatwierdź Enter. Klucz zapisuje się prywatnie przez DPAPI dla tego samego użytkownika Windows. Nie przesyłaj go w czacie. Otwórz zakładkę CoinGecko i kliknij **Pobierz dane**. Narzędzie konfiguracji samo nie wykonuje żądania API. Alternatywnie proces może dostać `COINGECKO_DEMO_API_KEY`. Tryb Pro nie został dodany.
+
+**Odświeżanie i koszty:** 16 cen pobierane jest jednym żądaniem `/coins/markets`, a `/global` i `/search/trending` osobno. Bufory: ceny 60 s, rynek 300 s, popularność 900 s; błędne odpowiedzi mają przerwę co najmniej 60 s. Po HTTP429 aplikacja respektuje ograniczoną przerwę Retry-After. Ręczne kliknięcie nie omija bufora. Domyślnie brak automatycznego odświeżania; opcja co minutę działa tylko w widocznym panelu. Nie zakładaj, że taki tryb może działać bezpłatnie całą dobę: dodatkowe odczyty kontekstu też zużywają API.
+
+Lokalny licznik żądań jest trwały w SQLite, według miesiąca UTC; nie liczy zużycia innych aplikacji i nie zastępuje rozliczeń dostawcy. Domyślny budżet aplikacji 9000/miesiąc jest naszym ograniczeniem, **nie deklarowanym limitem planu CoinGecko**. Można ustawić `COINGECKO_MONTHLY_BUDGET` po sprawdzeniu swojego planu; dopuszczalne wartości 100–10000000. Lokalnie do 5 nowych żądań/minutę. Osiągnięcie budżetu wstrzymuje nowe pobieranie, nie podstawia innych danych. Ceny i kontekst są oznaczane czasem dostawcy/pobrania; brak lub stara cena pozostaje jawnie oznaczona, także przy długo otwartym panelu bez odświeżania.
+
+**Zlecenia i analiza techniczna:** CoinGecko nie trafia do źródeł bota, historycznego wykonawcy, alertów, dziennika ani prognoz. Wykresy nadal używają zamkniętych świec z wybranego źródła. Zbiorcza cena USD nie zastępuje bid/ask i specyfikacji kontraktu OKX / USDT. Brak deklaracji rozdzielczości historii, niskich opóźnień czy bezpośredniego zastosowania do transakcji. Bot pozostaje paper/OKX Demo. Zmiana kodu wymaga nowej wersji i walidacji strategii przed dopuszczeniem Demo.
+
+Bezpieczeństwo: stałe HTTPS api.coingecko.com, brak przekierowań, klucz tylko w nagłówku serwera, bez klucza w URL/SQLite/eksporcie/przeglądarce/logach. Monety mapujemy przez stałe identyfikatory CoinGecko, nie samo podobieństwo symboli. Importowane nazwy z listy wyszukiwań pozostają tekstem i nie dodają instrumentów do bota. Wszystkie dotychczasowe zabezpieczenia lokalnego API/CSP/manifestu obowiązują.
+
+Możliwe dalsze rozszerzenia po sprawdzeniu endpointów i planu: porównania siły instrumentów i sektorów, miary kapitalizacji/wolumenu/podaży, historia do korelacji i ryzyka portfela, porównanie danych między dostawcami. Nie są to automatycznie zainstalowane strategie ani potwierdzona przewaga tradingowa.
+
+API aplikacji: `GET /api/coingecko/status` (konfiguracja/zużycie bez połączenia z dostawcą), `GET /api/coingecko/overview` (trzy niezależnie buforowane sekcje). Nowa tabela `coingecko_usage` zawiera wyłącznie miesiąc i liczbę żądań, jest uwzględniona w eksporcie. Nie ma endpointu wpisywania/odczytywania klucza przez HTTP. Podanie klucza w pliku lub jego obecność nie potwierdza uwierzytelnienia; sprawdź faktyczny odczyt w panelu.
 
 ## Aktualizacja 2.1.0 — zabezpieczenia i więcej kryptowalut
 

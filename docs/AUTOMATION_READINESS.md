@@ -1,4 +1,8 @@
-# Weryfikacja automatyzacji 2.1
+# Weryfikacja automatyzacji 2.2
+
+Aktualizacja 29.10.2026: CoinGecko dodano jako oddzielny kontekst cen zbiorczych i szerokiego rynku, bez dostępu do wykonawcy, sygnałów, OHLC, alertów i dziennika. Przeszło 256 testów Python/HTTP, 14 testów modelu wykresu i 6 zestawów Chromium (wcześniejsze 5 oraz CoinGecko). Nowe testy używają kontrolowanych odpowiedzi: batch 16 monet, identyfikatory, klucz tylko w nagłówku, brak klucza, cache/zużycie, awarie/HTTP429, znacznik czasu, jawna nieaktualność, tekst zewnętrzny, mobile i niezależność bota. Autentyczny klucz CoinGecko nie był dostępny; próby odczytu oficjalnej dokumentacji i API zatrzymał proxy HTTP403. Nie zweryfikowano uwierzytelnienia, schematu bieżącej usługi na żywo, warunków planu ani Windows DPAPI dla nowego narzędzia konfiguracji. Sam wpisany klucz nie potwierdza połączenia.
+
+Poniższe starsze sprawdzenia zachowują historyczne daty i ograniczenia; aktualny numer wydania to 2.2.0.
 
 Aktualizacja 28.10.2026: wydanie 2.1.0 dodaje ochronę lokalnego API, CSP, limity i kontrolę zgodności paczki oraz 12 kryptowalut (łącznie 16). Przeszło 236 testów Python/HTTP, 14 testów modelu wykresu i 5 zestawów Chromium: start, wykres, bot, automatyzacja i próby ataków. Przeglądarka potwierdziła zablokowanie obcej strony oraz skryptu inline; złośliwe nagłówki wiadomości pozostały tekstem. Formularz specyfikacji w teście automatyzacji używał kontrolowanej odpowiedzi, nie bieżącego API OKX. Import publicznego źródła Freqtrade w teście bota zakończył się zapisem materiału bez wykonania kodu.
 

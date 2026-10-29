@@ -5,6 +5,7 @@ import urllib.parse
 import urllib.request
 
 HOSTS = frozenset({'www.okx.com', 'api.exchange.coinbase.com', 'query1.finance.yahoo.com',
+                  'api.coingecko.com',
                   'www.coindesk.com', 'cointelegraph.com', 'www.eia.gov', 'news.google.com',
                   'raw.githubusercontent.com'})
 

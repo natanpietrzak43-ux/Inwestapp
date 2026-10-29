@@ -1,7 +1,7 @@
 /* Diagnostics must run before chart.js/app.js so failed loads remain visible. */
 (()=>{
  const expected=document.documentElement.dataset.uiVersion;
- const files=new Set(['startup.js','security.js','instruments.js','chart.js','education.js','app.js','workspace.js','bot.js','automation.js']);
+ const files=new Set(['startup.js','security.js','instruments.js','chart.js','education.js','app.js','workspace.js','bot.js','automation.js','coingecko.js']);
  let ready=false,health=false,failed=false,started=false,timer;
  function fail(message){failed=true;const box=document.getElementById('update-status');if(!box)return;box.classList.add('warning');document.getElementById('startup-state').textContent=message+' Uruchom Uruchom.bat z nowego, w całości rozpakowanego folderu i odśwież stronę przez Ctrl+F5.';}
  function show(){if(!failed&&ready&&health){document.getElementById('startup-state').textContent='Nowy wykres i wyjaśnienia „?” są wczytane.';document.getElementById('update-status').classList.remove('warning');document.getElementById('show-chart').disabled=false;document.getElementById('demo-chart').disabled=false;}}

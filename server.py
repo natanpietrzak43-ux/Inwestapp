@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import http_security
+import coingecko_data
 import network_guard
 import random
 import sqlite3
@@ -179,6 +180,11 @@ class Handler(BaseHTTPRequestHandler):
                 'notice':'Ochrona aplikacji nie zastępuje Microsoft Defender ani aktualizacji Windows. Token nie chroni przed programem działającym już na Twoim koncie Windows.'})
         if parsed.path == '/api/health':
             return self.send_json({'status': 'ok', 'version': APP_VERSION, 'instruments': list(INSTRUMENTS), 'features': FEATURES})
+        if parsed.path in ('/api/coingecko/status','/api/coingecko/overview'):
+            try:
+                return self.send_json(coingecko_data.status() if parsed.path.endswith('/status') else coingecko_data.overview())
+            except ValueError as error:return self.send_json({'error':str(error)},400)
+            except (sqlite3.Error,OSError):return self.send_json({'error':'Nie udało się odczytać prywatnej konfiguracji lub licznika CoinGecko.'},503)
         if parsed.path in ('/api/ops/status','/api/demo/status','/api/strategies/versions','/api/contracts'):
             try:
                 if parsed.path=='/api/ops/status':return self.send_json(runtime_ops.status())

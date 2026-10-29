@@ -8,7 +8,7 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8032';
   // The exchange contract below is a controlled fixture, not a live API check.
   await page.route('**/api/contracts?*',r=>r.fulfill({json:{instId:'XLM-USDT-SWAP',unitsPerContract:'100',lotSz:'0.1',minSz:'0.1',tickSz:'0.00001',tiers:[{tier:1}]}}));
  try{
-  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.1.0');
+  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.2.0');
   await page.click('[data-tab="bot"]');await page.waitForFunction(()=>document.querySelectorAll('#bot-form [name="preset"] option').length===5);
   await page.waitForFunction(()=>document.querySelector('#bot-state').textContent!=='Wczytywanie stanu…');
   await page.selectOption('#bot-form [name="market"]','perpetual');await page.selectOption('#bot-form [name="instrument"]','XLM');await page.fill('#bot-form [name="leverage"]','2');

@@ -7,7 +7,7 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8019';
  try{
   const p=await page(),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(base);
   await p.waitForFunction(()=>document.querySelector('#startup-state').textContent.includes('są wczytane'));
-  assert.equal(await p.locator('#server-version').textContent(),'2.1.0');assert.equal(await p.locator('#tool-options .tool-help').count(),14);
+  assert.equal(await p.locator('#server-version').textContent(),'2.2.0');assert.equal(await p.locator('#tool-options .tool-help').count(),14);
   await p.click('#demo-chart');await p.waitForFunction(()=>document.querySelector('#price-chart svg')&&document.querySelector('#notice').textContent.includes('DEMONSTRACJA'));
   assert.ok(await p.locator('.chart-toolbar').isVisible());assert.equal(await p.locator('[data-chart-mode]').count(),4);assert.deepEqual(errors,[]);
   await p.screenshot({path:'/tmp/inwestapp-v200-ready.png',fullPage:true});await p.close();

@@ -20,6 +20,7 @@ REQUIRED = ('notification_channel.py','decision_engine.py','shared_replay.py','e
             'agent_pipeline.py','okx_data.py','technical_tools.py','custom_indicators.py',
             'timeframes.py','user_data.py','news_data.py','strategy_lab.py','trader_mcp.py')
 REQUIRED += ('http_security.py','network_guard.py','release_integrity.py','instrument_catalog.py','release-manifest.json')
+REQUIRED += ('coingecko_data.py',)
 
 
 def installation_errors(root=ROOT):

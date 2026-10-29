@@ -21,7 +21,7 @@ HEADERS = {
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
 }
 HEAVY = {'/api/analyze', '/api/import', '/api/bot/backtest', '/api/strategies/test',
-         '/api/strategies/validate', '/api/strategies/source', '/api/mcp/research'}
+         '/api/strategies/validate', '/api/strategies/source', '/api/mcp/research', '/api/coingecko/overview'}
 _LOCK = threading.Lock()
 
 
