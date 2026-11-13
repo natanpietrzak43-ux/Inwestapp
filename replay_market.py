@@ -3,12 +3,14 @@ from datetime import datetime,timezone
 import time
 import contract_specs
 import okx_data
+import execution_context
 from timeframes import TIMEFRAMES,candle_time
 
 
 def mark_history(key,tf,begin,end,open_only=False):
     cursor=None;result={};step=TIMEFRAMES[tf]['seconds']
     for _ in range(80):
+        execution_context.check_cancelled()
         params={'instId':okx_data.symbol(key,'perpetual'),'bar':okx_data.BARS[tf],'limit':'100'}
         if cursor is not None:params['after']=str(cursor)
         rows=okx_data.request('/api/v5/market/history-mark-price-candles',params)

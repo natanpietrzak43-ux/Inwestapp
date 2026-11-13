@@ -1,4 +1,6 @@
-# Zabezpieczenia Inwestapp 2.2
+# Zabezpieczenia Inwestapp 2.3
+
+Wersja 2.3 dodaje zadania symulacji w tle z jednym aktywnym wykonaniem i zweryfikowanymi parametrami, bez operacji giełdowych. Bieżący publiczny status OKX może wstrzymać nowe wejścia Demo; uzgadnianie i ochrona pozycji pozostają aktywne. Prosty/zaawansowany widok nie zmienia uprawnień ani bramek serwera. Wszystkie operacje zapisu nadal wymagają tokena. Dane zadań i raporty nie zawierają kluczy.
 
 Wersja 2.2 dodaje wyłącznie odczyt kontekstu CoinGecko przez stały host `api.coingecko.com` i trzy ustalone endpointy Demo API. Klucz jest przesyłany tylko w nagłówku serwera, przechowywany jak pozostałe prywatne ustawienia; nie jest dostępny przez HTTP ani w eksporcie. Przekierowania są odrzucane. Nazwy z list popularności renderujemy jako tekst. Wbudowane limity, bufory i trwały licznik ograniczają zużycie API, ale nie potwierdzają limitów i kosztów planu dostawcy. CoinGecko nie trafia do cen zleceń, sygnałów, alertów ani wykresów OHLC. Wtyczka czatu i połączenie lokalnej aplikacji to oddzielne integracje.
 
@@ -27,7 +29,7 @@ Token ma losowość 32 bajtów, jest wspólny dla procesu serwera, przechowywany
 2. Pobierz pełny ZIP konkretnego wydania z właściwego repozytorium GitHub. Rozpakuj do nowego folderu. Nie mieszaj źródeł z poprzednią wersją.
 3. Skanuj folder aktualnym Microsoft Defender lub własnym antywirusem. `Skanuj-Defender.bat` wywołuje istniejący skaner: nie instaluje ochrony, nie dodaje wyjątków i nie obchodzi PowerShell Execution Policy. Gdy polityka blokuje skrypt, skanuj przez menu folderu w Eksploratorze. Wynik sprawdź w Historii ochrony; wywołanie nie dowodzi zakończenia skanu bez zagrożeń.
 4. Uruchom `Sprawdz-bezpieczenstwo.bat`, następnie `Uruchom.bat` lub wariant z nadzorem. Brak manifestu/zmienione pliki zatrzymują start. Nie regeneruj manifestu, żeby ominąć ostrzeżenie.
-5. Sprawdź wersję 2.2.0 i kartę zabezpieczeń w Centrum automatyzacji. Po zmianie kodu strategie wymagają nowej wersji i walidacji. Kluczy nie wklejaj do czatu ani źródeł.
+5. Sprawdź wersję 2.3.0 i kartę zabezpieczeń w Centrum automatyzacji. Po zmianie kodu strategie wymagają nowej wersji i walidacji. Kluczy nie wklejaj do czatu ani źródeł.
 6. Utrzymuj wspierany i aktualizowany system. Na Windows 10 potrzebne są aktywne poprawki ESU lub przejście na wspierany system. Nie wyłączaj Defendera, SmartScreen ani zapory w celu uruchomienia aplikacji.
 
 Manifest sprawdza zgodność i kompletność plików, nie podpis wydawcy ani brak wirusów. Nie zmieniamy ustawień ochrony Windows z chmury. Nie uruchomiliśmy skanera Windows ani DPAPI na komputerze użytkownika.

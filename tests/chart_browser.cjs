@@ -13,7 +13,7 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8018';
  async function painted(){await page.waitForFunction(()=>marketChart.rows?.length===marketChart.view.count&&marketChart.offset===marketChart.view.start);}
  async function clickChart(index,price){const point=await chartPoint(index,price);await page.mouse.click(point.x,point.y);return point;}
  try{
-  await page.goto(base);await demo();
+  await page.goto(base);await page.waitForFunction(()=>window.enableAdvanced);await page.evaluate(()=>window.enableAdvanced());await page.click('[data-tab="analysis"]');await demo();
   const point=await chartPoint(50);await page.mouse.move(point.x,point.y);
   let actual=await page.evaluate(()=>({index:marketChart.cursor.index,value:marketChart.cursor.price,date:marketChart.rows[marketChart.cursor.index].date}));
   assert.equal(actual.index,50);assert.equal(actual.date,point.date);const tolerance=await page.evaluate(()=>(marketChart.frame.max-marketChart.frame.min)/marketChart.frame.plotH*.5);assert.ok(Math.abs(actual.value-point.value)<=tolerance,'Cursor must map within half a CSS pixel');
@@ -27,7 +27,7 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8018';
   const checks=await page.locator('#tool-options input:checked').count();let analyzeRequests=0;const track=req=>{if(req.url().includes('/api/analyze'))analyzeRequests++;};page.on('request',track);
   for(const button of await page.locator('#tool-options .tool-help').all()){await button.click();assert.ok(await page.locator('#tool-help-dialog').evaluate(d=>d.open));assert.equal(await page.locator('#tool-help-content h3').count(),4);await page.keyboard.press('Escape');assert.equal(await page.locator('#tool-help-dialog').evaluate(d=>d.open),false);}
   assert.equal(await page.locator('#tool-options input:checked').count(),checks);assert.equal(analyzeRequests,0);page.off('request',track);
-  await page.reload();await demo();assert.equal(await page.evaluate(()=>JSON.stringify(marketChart.marks)),saved);
+  await page.reload();await page.click('[data-tab="analysis"]');await demo();assert.equal(await page.evaluate(()=>JSON.stringify(marketChart.marks)),saved);
   await page.locator('#instruments .instrument').nth(1).click();await page.waitForFunction(()=>data?.instrument.id==='XLM');assert.equal(await page.evaluate(()=>marketChart.marks.length),0);
   await page.locator('#instruments .instrument').first().click();await page.waitForFunction(()=>data?.instrument.id==='XRP');assert.equal(await page.evaluate(()=>JSON.stringify(marketChart.marks)),saved);
   await page.selectOption('#timeframe','1d');await page.waitForFunction(()=>data?.timeframe==='1d');await page.click('[data-range="1"]');await page.waitForFunction(()=>marketChart.view.count===1);await painted();

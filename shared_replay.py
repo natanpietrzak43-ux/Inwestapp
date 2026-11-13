@@ -37,6 +37,7 @@ def run(rows,cfg,start_date=None,end_date=None,spread_bps=10,ledger=True,start_i
             paper_bot.advance(run_id,q,snapshot,now=when);events+=1
             return paper_bot.current_state()
         for i in indices:
+            execution_context.check_cancelled()
             now=stamps[i].timestamp();prior=bars[max(0,i-LOOKBACK_PAD):i];prior_inds=inds[max(0,i-LOOKBACK_PAD):i]
             markrow=bundle['marks'][now] if bundle else bars[i]
             snapshot=decision_engine.analysis(prior,prior_inds,cfg,now)

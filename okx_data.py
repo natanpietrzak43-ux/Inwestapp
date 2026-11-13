@@ -10,6 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 import network_guard
+import execution_context
 from instrument_catalog import CRYPTO
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,6 +88,7 @@ def candles(key,tf='1h',market='spot'):
         prior_last=max(history) if history else None;cursor=None;now=time.time();seen=set()
         target=min(MAX_BARS,max(400,int(180*86400/SECONDS[tf])))
         for _ in range(52):
+            execution_context.check_cancelled()
             params={'instId':inst,'bar':BARS[tf],'limit':'100'}
             if cursor is not None:params['after']=str(cursor)
             page=request('/api/v5/market/history-candles',params)

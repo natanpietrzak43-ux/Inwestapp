@@ -21,6 +21,7 @@ REQUIRED = ('notification_channel.py','decision_engine.py','shared_replay.py','e
             'timeframes.py','user_data.py','news_data.py','strategy_lab.py','trader_mcp.py')
 REQUIRED += ('http_security.py','network_guard.py','release_integrity.py','instrument_catalog.py','release-manifest.json')
 REQUIRED += ('coingecko_data.py',)
+REQUIRED += ('backtest_jobs.py','exchange_health.py')
 
 
 def installation_errors(root=ROOT):

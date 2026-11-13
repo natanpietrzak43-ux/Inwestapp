@@ -35,3 +35,5 @@
 #replay-chart svg{display:block;width:100%;height:auto;max-height:300px}
 
 .sidebar{overflow-y:auto}#automation .entry-actions{flex-wrap:wrap}#automation .entry-actions .button{white-space:normal}#automation-config{overflow-wrap:anywhere}
+
+body[data-view=simple] .advanced-only{display:none!important}#home .entry-actions,#history .entry-actions{flex-wrap:wrap}#guide-ready p{overflow-wrap:anywhere}#guide-test-metrics{margin-top:16px}.guide-blocked{border-left:4px solid #c6924b;padding-left:12px}#guide-assumptions{line-height:1.8}.topbar{gap:10px;flex-wrap:wrap;min-height:75px;height:auto;padding-top:12px;padding-bottom:12px}

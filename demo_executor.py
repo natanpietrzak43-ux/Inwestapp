@@ -13,6 +13,7 @@ from decimal import Decimal
 import contract_specs
 import decision_engine
 import okx_demo
+import exchange_health
 import okx_data
 import runtime_ops
 import strategy_registry
@@ -279,6 +280,9 @@ class Executor:
             state.update(lastDecision=result['action'],lastReason='; '.join(result['reasons']) or result['reason'],lastCandle=result['candle'])
             if result['action']=='CLOSE' and pos:self.close_owned(state,pos[0],'Przeciwny sygnał strategii')
             elif result['action'] in ('LONG','SHORT') and state['active'] and not pos and result['candle']!=state.get('lastSubmittedCandle'):
+                health=exchange_health.snapshot();state['exchangeHealth']=health
+                if not health['entryAllowed']:
+                    state.update(lastDecision='WAIT',lastReason=health['reason'],status=health['reason']);save(state);return
                 spec=contract_specs.fetch(cfg['instrument'],lambda p,q:self.request('GET',p,q))
                 fees=self.request('GET','/api/v5/account/trade-fee',{'instType':'SWAP','instFamily':cfg['instrument']+'-USDT'})
                 if not fees or abs(float(fees[0]['taker']))*10000>cfg['costs']:raise ValueError('Prowizja Demo przekracza założenie zatwierdzonego testu.')

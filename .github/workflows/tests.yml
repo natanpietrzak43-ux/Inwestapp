@@ -29,4 +29,5 @@ jobs:
       - run: node --check web/automation.js
       - run: node --check web/security.js
       - run: node --check web/coingecko.js
+      - run: node --check web/guide.js
       - run: python tools/security_check.py

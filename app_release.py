@@ -1,5 +1,5 @@
 """Release contract shared by the launcher and the local HTTP server."""
-APP_VERSION = '2.2.0'
+APP_VERSION = '2.3.0'
 FEATURES = ['interactive-chart', 'indicator-education', 'bot-history-replay', 'paper-perpetuals', 'strategy-source-import', 'shared-execution-engine', 'okx-demo-executor', 'strategy-approvals', 'runtime-supervisor', 'local-api-security', 'release-integrity', 'expanded-crypto-catalog']
 STATIC_PATHS = {
     '/': 'index.html', '/style.css': 'style.css', '/startup.js': 'startup.js',
@@ -8,4 +8,5 @@ STATIC_PATHS = {
     '/security.js': 'security.js', '/instruments.js': 'instruments.js',
     '/coingecko.js': 'coingecko.js',
 }
-FEATURES += ['coingecko-market-context']
+FEATURES += ['coingecko-market-context','guided-start','background-backtests','exchange-maintenance-guard']
+STATIC_PATHS['/guide.js']='guide.js'

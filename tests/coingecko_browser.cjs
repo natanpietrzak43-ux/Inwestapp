@@ -19,7 +19,7 @@ const instruments=JSON.parse(fs.readFileSync('web/instruments.js','utf8').split(
  await page.route('**/api/coingecko/status',r=>r.fulfill({json:{configured,usage,readOnly:true}}));
  await page.route('**/api/coingecko/overview',r=>{calls++;return r.fulfill(outage?{status:502,json:{error:'Controlled CoinGecko outage'}}:{json:data});});
  try{
-  await page.goto(base);await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.2.0');
+  await page.goto(base);await page.waitForFunction(()=>window.enableAdvanced);await page.evaluate(()=>window.enableAdvanced());await page.waitForFunction(()=>document.querySelector('#server-version').textContent==='2.3.0');
   assert.equal(calls,0);const before=await(await page.request.get(base+'/api/bot')).json();
   await page.click('[data-tab="coingecko"]');await page.waitForFunction(()=>document.querySelector('#coingecko-state').textContent.includes('Brak klucza'));
   assert.equal(calls,0);assert.equal(await page.isChecked('#coingecko-auto'),false);assert.ok(await page.locator('#dashboard').isHidden());

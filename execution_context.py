@@ -5,6 +5,15 @@ from contextvars import ContextVar
 root = ContextVar('replay_storage', default=None)
 clock = ContextVar('replay_clock', default=None)
 market_data = ContextVar('replay_market_data', default=None)
+cancellation = ContextVar('backtest_cancellation', default=None)
+
+
+class Cancelled(Exception):pass
+
+
+def check_cancelled():
+    event=cancellation.get()
+    if event is not None and event.is_set():raise Cancelled()
 
 
 @contextmanager

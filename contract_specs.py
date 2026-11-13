@@ -4,6 +4,7 @@ import hashlib
 import json
 import time
 import okx_data
+import execution_context
 
 
 def decimal(value,positive=True):
@@ -70,6 +71,7 @@ def funding_history(key,begin_ms,end_ms):
     """Return actual known settlements only; fail on incomplete interval coverage."""
     result=[];cursor=None;oldest=None;latest=None
     for _ in range(100):
+        execution_context.check_cancelled()
         params={'instId':okx_data.symbol(key,'perpetual'),'limit':'100'}
         if cursor is not None:params['after']=str(cursor)
         rows=okx_data.request('/api/v5/public/funding-rate-history',params)

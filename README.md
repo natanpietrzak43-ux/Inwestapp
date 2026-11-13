@@ -1,7 +1,25 @@
-# Inwestapp 2.2.0
+# Inwestapp 2.3.0
 
 Prywatny warsztat analizy 16 kryptowalut i referencyjnych cen surowców. Bot papierowy oraz osobny wykonawca **OKX Demo**. **Brak trybu handlu prawdziwymi środkami.**
 
+
+## Aktualizacja 2.3.0 — prosty start i widoczne testy bota
+
+Domyślny ekran **Start krok po kroku** prowadzi przez ustawienia, test historyczny i osobny start handlu papierowego. Nowa pozycja **Test bota na historii** jest widoczna od razu. Przycisk **Więcej funkcji i ustawień** odsłania wszystkie dotychczasowe panele i parametry; widok można przełączyć z powrotem i wybór zapamiętuje się w przeglądarce. Dotychczasowe narzędzia, edukacja, wykresy, CSV, porównania strategii, dziennik, wiadomości, CoinGecko i OKX Demo pozostają dostępne. Zmiana widoku nie uruchamia bota i nie modyfikuje konfiguracji konta.
+
+**Windows:** zatrzymaj poprzedni serwer i nadzór, rozpakuj cały ZIP 2.3.0 do nowego folderu, uruchom Sprawdz-bezpieczenstwo.bat, następnie **Uruchom.bat**. Opcjonalny **Pierwsze-uruchomienie.bat** grupuje otwarcie aplikacji, lokalne konfiguracje kluczy i poczty oraz kontrolę plików w jednym menu. Nie instaluje usług ani abonamentów, nie wyłącza ochrony systemu i nie wysyła kluczy do czatu. Domyślny folder danych Windows pozostaje `%LOCALAPPDATA%\Inwestapp`. Nadzór nadal uruchamia się osobno przez Uruchom-z-nadzorem.bat. Zmiana kodu wymaga nowej wersji/walidacji strategii przed startem Demo.
+
+**Testy historyczne:** wybierz instrument, rynek, interwał, zestaw, kapitał i ryzyko, następnie historię 30/90/180 dni oraz dane rzeczywiste lub jawnie syntetyczne. Ustawienia kosztów i ryzyka są opisane przed startem; pełne parametry i CSV są w panelu zaawansowanym. Test korzysta z tego samego pełnego wykonawcy co dotychczas. Raport pokazuje rzeczywiste daty, liczbę świec po rozgrzewce, wynik netto, obsunięcie, liczbę transakcji i koszty. Dane dostawcy mogą obejmować krótszy okres. Zero transakcji lub mała próba to brak podstaw do oceny skuteczności, nie dowód dobrej strategii.
+
+Test działa w oddzielnym wątku z trwałym stanem i raportem: można przejść do innej zakładki lub zamknąć przeglądarkę, pozostawiając działający serwer. Jednocześnie dopuszczony jest jeden nowy test w tle. Anulowanie następuje przy kolejnym punkcie kontrolnym, po bieżącym żądaniu sieciowym/obliczeniu. Zrestartowany serwer oznacza niedokończone zadania jako przerwane; nie uruchamia ich ponownie automatycznie. Ukończone raporty pozostają zapisane. Zamknięcie procesu serwera nie pozwala kontynuować obliczeń.
+
+Prosty start handlu papierowego wymaga pełnego raportu rzeczywistej historii i zgodności jego parametrów z formularzem. Raport syntetyczny nie odblokowuje tego przycisku; syntetyka służy nauce obsługi. Raport może być słaby — symulacja nadal podlega blokadom danych, strategii i ryzyka. Nie jest to zgoda na handel giełdowy. Dotychczasowy zaawansowany start papierowy i osobna walidacja/zatwierdzenie Demo pozostają dostępne. Nowe konto symulacyjne nadal wymaga świadomej akcji i zachowuje poprzednie wyniki w archiwum.
+
+**Nowa integracja ochronna:** publiczne API OKX `/api/v5/system/status?state=ongoing`, odczyt bez dodatkowego klucza lub MCP. Bufor 60 s. Trwający komunikat albo niepotwierdzony odczyt wstrzymuje nowe wejścia Demo; przy kolejnym poprawnym odczycie możliwa jest nowa ocena. Kontrola odbywa się po uzgodnieniu konta i przed przygotowaniem wejścia. Nie wyłącza uzgadniania, zleceń ochronnych, redukcji ani zamykania posiadanej pozycji. Brak zgłoszonej przerwy nie gwarantuje dostępności giełdy. Nie odtwarzamy tej bieżącej kontroli jako historycznych awarii w backteście. Jawna informacja pojawia się na ekranie Start i w przyczynie WAIT.
+
+W tej wersji nie instalowano nowych płatnych usług, serwerów MCP ani pakietów Pythona. Aktualny istniejący REST OKX rozwiązuje konkretną kontrolę operacyjną. Znana blokada trader.dev pozostaje bez obchodzenia. CoinGecko, MCP i poczta są opcjonalne i nie blokują testów/papierowego konta. Wskaźniki i wynik testu nie gwarantują zysku.
+
+API: `GET /api/backtest-jobs` (ostatnie 10) lub `?id=...`, `POST /api/backtest-jobs` (zweryfikowane parametry; bez CSV w nowym prostym przepływie), `POST /api/backtest-jobs/cancel` z id; `GET /api/exchange/health`. Stary POST /api/bot/backtest nadal działa synchronicznie i obsługuje pełne opcje CSV. Tabela backtest_jobs zawiera wyłącznie zweryfikowane parametry, stan i identyfikator raportu; nie zapisuje dowolnych pól ani kluczy API i jest uwzględniona w eksporcie. Ochrona lokalnego API/CSP i kontrola manifestu pozostają obowiązkowe.
 
 ## Aktualizacja 2.2.0 — CoinGecko jako dodatkowy kontekst rynku
 

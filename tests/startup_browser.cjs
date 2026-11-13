@@ -5,9 +5,9 @@ const base=process.env.INWESTAPP_TEST_BASE||'http://127.0.0.1:8019';
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  async function page(){const p=await browser.newPage();await p.route('**/api/quotes**',r=>r.fulfill({json:{quotes:[],fetchedAt:new Date().toISOString(),alertEvents:[]}}));await p.route('**/api/analyze?*',r=>new URL(r.request().url()).searchParams.get('mode')==='demo'?r.continue():r.fulfill({status:502,json:{error:'Kontrolowana niedostępność notowań — test interfejsu.'}}));return p;}
  try{
-  const p=await page(),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(base);
+  const p=await page(),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(base);await p.waitForFunction(()=>window.enableAdvanced);await p.evaluate(()=>window.enableAdvanced());
   await p.waitForFunction(()=>document.querySelector('#startup-state').textContent.includes('są wczytane'));
-  assert.equal(await p.locator('#server-version').textContent(),'2.2.0');assert.equal(await p.locator('#tool-options .tool-help').count(),14);
+  assert.equal(await p.locator('#server-version').textContent(),'2.3.0');assert.equal(await p.locator('#tool-options .tool-help').count(),14);
   await p.click('#demo-chart');await p.waitForFunction(()=>document.querySelector('#price-chart svg')&&document.querySelector('#notice').textContent.includes('DEMONSTRACJA'));
   assert.ok(await p.locator('.chart-toolbar').isVisible());assert.equal(await p.locator('[data-chart-mode]').count(),4);assert.deepEqual(errors,[]);
   await p.screenshot({path:'/tmp/inwestapp-v200-ready.png',fullPage:true});await p.close();

@@ -52,6 +52,8 @@ def research_run(rows,cfg,start_date=None,end_date=None,spread_bps=10,ledger=Tru
         if equity<=day_equity*(1-cfg['daily_loss']/100):daily_halted=True
         if p and (daily_halted or drawdown_halted):close(value,bar,'Limit obsunięcia' if drawdown_halted else 'Limit straty dnia UTC')
     for i in indices:
+        import execution_context
+        execution_context.check_cancelled()
         bar=bars[i];stamp=stamps[i].timestamp();current_day=stamps[i].date().isoformat();exited=False
         if p:
             model.funding(p,bar['open'],stamp,cfg)

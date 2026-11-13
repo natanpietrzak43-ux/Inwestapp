@@ -231,12 +231,20 @@ class FakeExchange:
 
 class DemoExecutionTests(Isolated):
     def setUp(self):
-        super().setUp();self.cfg=config();v=strategy_registry.register(self.cfg)
+        super().setUp();health=patch('exchange_health.snapshot',return_value={'entryAllowed':True,'verified':True});health.start();self.addCleanup(health.stop)
+        self.cfg=config();v=strategy_registry.register(self.cfg)
         validation=strategy_registry.save_validation({'fingerprint':v['fingerprint'],'eligible':True});strategy_registry.approve(v['id'],validation['id'],True)
         with patch('okx_demo.configured',return_value=True):demo.start(v['id'])
         self.exchange=FakeExchange();self.executor=demo.Executor(self.exchange);self.now=time.time();self.a=fixture(self.now);self.q=quote(self.now)
     def pulse(self):self.executor.pulse(self.a,self.q)
     def order_posts(self):return [p for path,p in self.exchange.posts if path=='/api/v5/trade/order']
+    def test_exchange_maintenance_holds_entry_but_does_not_disable_existing_protection(self):
+        hold={'entryAllowed':False,'verified':True,'reason':'Maintenance test'}
+        with patch('exchange_health.snapshot',return_value=hold):self.pulse()
+        self.assertEqual(self.order_posts(),[]);self.assertTrue(demo.load()['active']);self.assertEqual(demo.load()['lastDecision'],'WAIT')
+        self.pulse();self.assertTrue(self.exchange.positions)
+        with patch('exchange_health.snapshot',return_value=hold):self.pulse()
+        self.assertTrue(demo.load()['protectionConfirmed']);self.assertTrue(self.exchange.positions)
     def test_unknown_accepted_entry_is_reconciled_and_never_duplicated_after_restart(self):
         self.exchange.timeout=True;self.pulse();self.assertEqual(demo.orders()[0]['state'],'unknown');self.assertEqual(len(self.order_posts()),1)
         self.exchange.timeout=False;demo.Executor(self.exchange).pulse(self.a,self.q)

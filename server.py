@@ -6,6 +6,8 @@ import io
 import json
 import http_security
 import coingecko_data
+import backtest_jobs
+import exchange_health
 import network_guard
 import random
 import sqlite3
@@ -110,6 +112,54 @@ def package(key, bars, mode, capital, risk, costs, fetched=None, timeframe='1d',
     return result
 
 
+def normalize_backtest(body, background=False):
+    if not isinstance(body,dict):raise ValueError('Wymagany obiekt parametrów testu.')
+    mode=body.get('mode','live')
+    if mode not in (('live','demo') if background else ('live','demo','csv')):raise ValueError('Wybierz historię rynku albo demonstrację. CSV pozostaje w panelu zaawansowanym.')
+    cfg=paper_bot.configuration({**body,'source':'reference'} if mode=='csv' and body.get('market','spot')=='spot' else body)
+    engine=body.get('execution_model','full');market_data=body.get('market_data','assumptions')
+    if engine not in ('full','rules') or market_data not in ('assumptions','contract'):raise ValueError('Nieprawidłowy model testu.')
+    if market_data=='contract' and (mode!='live' or cfg['market']!='perpetual' or engine!='full'):raise ValueError('Dane kontraktowe wymagają pełnego testu historii OKX perpetual.')
+    result={**cfg,'mode':mode,'execution_model':engine,'market_data':market_data,'spread_bps':user_data.numeric(body.get('spread_bps',10),0,200)}
+    for name in ('start_date','end_date'):
+        value=body.get(name) or None
+        if value is not None:
+            try:datetime.strptime(value,'%Y-%m-%d')
+            except (ValueError,TypeError):raise ValueError('Daty testu: RRRR-MM-DD (UTC).') from None
+        result[name]=value
+    if result['start_date'] and result['end_date'] and result['start_date']>result['end_date']:raise ValueError('Początek wypada po końcu testu.')
+    if body.get('history_days') is not None:result['history_days']=int(user_data.numeric(body['history_days'],1,180))
+    if mode=='csv':
+        if not isinstance(body.get('csv'),str) or cfg['market']!='spot':raise ValueError('CSV wymaga tekstu i rynku spot.')
+        if body.get('csv_instrument')!=cfg['instrument'] or body.get('csv_timeframe')!=cfg['timeframe']:raise ValueError('Instrument i interwał testu muszą zgadzać się z importem CSV.')
+        result.update(csv=body['csv'],csv_instrument=cfg['instrument'],csv_timeframe=cfg['timeframe'])
+    return result
+
+
+def run_historical_test(body, phase=lambda value:None):
+    import execution_context
+    body=normalize_backtest(body);cfg=paper_bot.configuration(body);key=cfg['instrument'];tf=cfg['timeframe'];mode=body['mode']
+    execution_context.check_cancelled()
+    if mode=='live':
+        try:bars,_=okx_data.candles(key,tf,'perpetual') if cfg['market']=='perpetual' else fetch_bars(key,tf,cfg['source'])
+        except execution_context.Cancelled:raise
+        except Exception:raise ValueError('Brak historii wybranego rynku. Nie zastąpiono jej danymi spot ani demonstracją.') from None
+    elif mode=='demo':bars=demo_bars(key,tf)
+    else:bars=list(csv.DictReader(io.StringIO(body['csv'].lstrip('\ufeff'))))
+    if body.get('history_days') and bars:
+        cutoff=(candle_time(bars[-1]['date'],tf)-timedelta(days=body['history_days']-1)).date().isoformat()
+        body['start_date']=max(body['start_date'] or cutoff,cutoff)
+    bundle=None
+    if body['market_data']=='contract':
+        phase('Pobieranie historycznych rozliczeń kontraktu')
+        bundle=replay_market.fetch(bars,cfg,body.get('start_date'),body.get('end_date'))
+    phase('Odtwarzanie decyzji, ryzyka i transakcji')
+    report=bot_backtest.run(bars,cfg,body.get('start_date'),body.get('end_date'),body['spread_bps'],engine=body['execution_model'],market_bundle=bundle)
+    report.update(instrument=key,market=cfg['market'],mode=mode,currency=cfg['currency'],source=cfg['source'] if mode=='live' else mode,demo=mode=='demo')
+    phase('Zapisywanie raportu');execution_context.check_cancelled()
+    return paper_bot.save_backtest(report)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'Inwestapp'
     sys_version = ''
@@ -178,6 +228,11 @@ class Handler(BaseHTTPRequestHandler):
                 'outboundHosts':sorted(network_guard.HOSTS),'redirectsAllowed':False,
                 'maxConnections':32,'maxConcurrentAnalyses':2,'integrity':release_integrity.verify(),
                 'notice':'Ochrona aplikacji nie zastępuje Microsoft Defender ani aktualizacji Windows. Token nie chroni przed programem działającym już na Twoim koncie Windows.'})
+        if parsed.path=='/api/exchange/health':return self.send_json(exchange_health.snapshot())
+        if parsed.path=='/api/backtest-jobs':
+            identifier=urllib.parse.parse_qs(parsed.query).get('id',[None])[0]
+            try:return self.send_json(backtest_jobs.records(identifier) if identifier else {'jobs':backtest_jobs.records()})
+            except ValueError as error:return self.send_json({'error':str(error)},404)
         if parsed.path == '/api/health':
             return self.send_json({'status': 'ok', 'version': APP_VERSION, 'instruments': list(INSTRUMENTS), 'features': FEATURES})
         if parsed.path in ('/api/coingecko/status','/api/coingecko/overview'):
@@ -305,6 +360,10 @@ class Handler(BaseHTTPRequestHandler):
             if len(raw)!=length:raise ValueError('Niekompletna treść żądania.')
             body=http_security.strict_json(raw)
             if not isinstance(body,dict):raise ValueError('Wymagany obiekt JSON.')
+            if method=='POST' and self.path=='/api/backtest-jobs':
+                return self.send_json(backtest_jobs.submit(normalize_backtest(body,True),run_historical_test),202)
+            if method=='POST' and self.path=='/api/backtest-jobs/cancel':
+                return self.send_json(backtest_jobs.cancel(body.get('id')))
             if method=='POST' and self.path in ('/api/demo/start','/api/demo/stop','/api/demo/close','/api/demo/check','/api/ops/backup',
                                                 '/api/ops/notify-test','/api/strategies/version','/api/strategies/validate','/api/strategies/approve','/api/strategies/revoke'):
                 if self.path=='/api/demo/start':return self.send_json(demo_executor.start(body.get('versionId')))
@@ -342,23 +401,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(paper_bot.save_research(record))
                 if self.path=='/api/strategies/source':return self.send_json(paper_bot.save_research(strategy_sources.fetch(body)))
                 if self.path=='/api/bot/backtest':
-                    mode=body.get('mode','live')
-                    config=paper_bot.configuration({**body,'source':'reference'} if mode=='csv' and body.get('market','spot')=='spot' else body);key=config['instrument'];tf=config['timeframe']
-                    if mode=='live':
-                        try:bars,_=okx_data.candles(key,tf,'perpetual') if config['market']=='perpetual' else fetch_bars(key,tf,config['source'])
-                        except Exception:return self.send_json({'error':'Brak historii wybranego rynku. Nie zastąpiono jej danymi spot ani demonstracją.'},502)
-                    elif mode=='demo':bars=demo_bars(key,tf)
-                    elif mode=='csv' and isinstance(body.get('csv'),str) and config['market']=='spot':
-                        if body.get('csv_instrument')!=key or body.get('csv_timeframe')!=tf:raise ValueError('Instrument i interwał testu muszą zgadzać się z importem CSV.')
-                        bars=list(csv.DictReader(io.StringIO(body['csv'].lstrip('\ufeff'))))
-                    else:raise ValueError('Wybierz historię dostawcy lub demonstrację; CSV tylko dla spot.')
-                    bundle=None
-                    if body.get('market_data')=='contract':
-                        if mode!='live' or config['market']!='perpetual':raise ValueError('Dane kontraktowe wymagają historii OKX perpetual.')
-                        bundle=replay_market.fetch(bars,config,body.get('start_date'),body.get('end_date'))
-                    report=bot_backtest.run(bars,config,body.get('start_date'),body.get('end_date'),body.get('spread_bps',10),engine=body.get('execution_model','full'),market_bundle=bundle)
-                    report.update(instrument=key,market=config['market'],mode=mode,currency=config['currency'],source=config['source'] if mode=='live' else mode,demo=mode=='demo')
-                    return self.send_json(paper_bot.save_backtest(report))
+                    try:return self.send_json(run_historical_test(body))
+                    except ValueError as error:return self.send_json({'error':str(error)},502 if str(error).startswith('Brak historii') else 400)
                 mode=body.get('mode','live');config=paper_bot.configuration(body if mode=='live' else {**body,'source':'reference'});key=config['instrument'];tf=config['timeframe']
                 if config['market']!='spot':raise ValueError('Porównanie pięciu zestawów jest dla spot. Futures przetestuj w Symulacji bota na historii.')
                 if mode=='live':
@@ -428,6 +472,7 @@ if __name__ == '__main__':
     bot_service=paper_bot.Service(lambda key,source:get_quotes([key],source=source)['quotes'][0],bot_analysis)
     try:bot_service.start()
     except ValueError as error:server.server_close();print(str(error),flush=True);raise SystemExit(4)
+    backtest_jobs.recover()
     demo_service=demo_executor.Service(bot_analysis);demo_service.start()
     supervisor=runtime_ops.Supervisor();supervisor.start()
     url = f'http://{args.host}:{args.port}'
@@ -439,6 +484,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print('\nSerwer zatrzymany.', flush=True)
     finally:
+        backtest_jobs.shutdown()
         demo_service.stop()
         supervisor.stop()
         # Keep the process-wide lease until process exit: another daemon may
